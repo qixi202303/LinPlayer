@@ -201,6 +201,22 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun primaryAbi(): String? {
+        // Best-effort: try to infer the *app* ABI (not the device preference).
+        // `Build.SUPPORTED_ABIS[0]` can be arm64 on devices where this app is installed as 32-bit.
+        val nativeDir = (applicationInfo.nativeLibraryDir ?: "").trim().lowercase()
+        if (nativeDir.isNotEmpty()) {
+            // Typical nativeLibraryDir ends with ".../lib/arm" / ".../lib/arm64" / ".../lib/x86" / ".../lib/x86_64".
+            val re = Regex("""/(arm64|arm|x86_64|x86)(/|$)""")
+            val match = re.find(nativeDir)
+            val seg = match?.groupValues?.getOrNull(1) ?: ""
+            when (seg) {
+                "arm64" -> return "arm64-v8a"
+                "arm" -> return "armeabi-v7a"
+                "x86_64" -> return "x86_64"
+                "x86" -> return "x86"
+            }
+        }
+
         val abis = Build.SUPPORTED_ABIS
         if (abis.isEmpty()) return null
         val v = abis[0].trim()

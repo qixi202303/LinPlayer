@@ -76,6 +76,18 @@
       </div>
     </div>
 
+    <div class="row" id="proxyNodeRow">
+      <div class="label">
+        <div class="title">选择节点</div>
+        <div class="desc">切换 Proxy 组当前节点（应用内走该节点）</div>
+      </div>
+      <div class="control" style="width: 360px;">
+        <select id="tvBuiltInProxyProxyNode"></select>
+        <button type="button" id="saveProxyNodeBtn" style="margin-top: 8px;">应用</button>
+        <div class="hint" id="proxyNodeHint"></div>
+      </div>
+    </div>
+
     <div class="row" id="proxyMediaRow">
       <div class="label">
         <div class="title">添加线路</div>
@@ -88,6 +100,20 @@
           <button type="button" id="clearProxyMediaBtn">清空</button>
         </div>
         <pre id="proxyMediaPreview" style="margin-top: 8px;"></pre>
+      </div>
+    </div>
+
+    <div class="row" id="proxyDiagRow">
+      <div class="label">
+        <div class="title">内核诊断</div>
+        <div class="desc">确认内核 ABI / 路径 / 日志（排查启动 -6）</div>
+      </div>
+      <div class="control" style="width: 360px;">
+        <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 0;">
+          <button type="button" id="refreshProxyDiagBtn">刷新</button>
+          <button type="button" id="copyProxyDiagBtn">复制</button>
+        </div>
+        <pre id="proxyDiagPreview" style="margin-top: 8px;"></pre>
       </div>
     </div>
 
@@ -231,11 +257,19 @@
       proxySubRow: document.getElementById('proxySubRow'),
       tvBuiltInProxySubscriptionUrl: document.getElementById('tvBuiltInProxySubscriptionUrl'),
       saveProxySubBtn: document.getElementById('saveProxySubBtn'),
+      proxyNodeRow: document.getElementById('proxyNodeRow'),
+      tvBuiltInProxyProxyNode: document.getElementById('tvBuiltInProxyProxyNode'),
+      saveProxyNodeBtn: document.getElementById('saveProxyNodeBtn'),
+      proxyNodeHint: document.getElementById('proxyNodeHint'),
       proxyMediaRow: document.getElementById('proxyMediaRow'),
       tvBuiltInProxyMediaServerLine: document.getElementById('tvBuiltInProxyMediaServerLine'),
       addProxyMediaBtn: document.getElementById('addProxyMediaBtn'),
       clearProxyMediaBtn: document.getElementById('clearProxyMediaBtn'),
       proxyMediaPreview: document.getElementById('proxyMediaPreview'),
+      proxyDiagRow: document.getElementById('proxyDiagRow'),
+      proxyDiagPreview: document.getElementById('proxyDiagPreview'),
+      refreshProxyDiagBtn: document.getElementById('refreshProxyDiagBtn'),
+      copyProxyDiagBtn: document.getElementById('copyProxyDiagBtn'),
       tvBackgroundMode: document.getElementById('tvBackgroundMode'),
       bgColorWrap: document.getElementById('bgColorWrap'),
       tvBackgroundColorPicker: document.getElementById('tvBackgroundColorPicker'),
@@ -301,11 +335,29 @@
         els.tvBuiltInProxyEnabled.disabled = !proxySupported;
         els.proxyDesc.textContent = proxySupported ? (proxyStatus.message || '支持') : '仅 Android TV 支持';
         els.proxySubRow.style.display = proxySupported ? '' : 'none';
+        els.proxyNodeRow.style.display = proxySupported ? '' : 'none';
         els.proxyMediaRow.style.display = proxySupported ? '' : 'none';
+        els.proxyDiagRow.style.display = proxySupported ? '' : 'none';
         els.tvBuiltInProxySubscriptionUrl.value = String(values.tvBuiltInProxySubscriptionUrl || '');
+        const proxyNodes = Array.isArray(values.tvBuiltInProxyProxyNodes) ? values.tvBuiltInProxyProxyNodes : [];
+        const proxyNow = String(values.tvBuiltInProxyProxyNodeSelected || '').trim();
+        setSelectOptions(
+          els.tvBuiltInProxyProxyNode,
+          proxyNodes.map((n) => ({ id: String(n), label: String(n) })),
+        );
+        if (proxyNow && proxyNodes.includes(proxyNow)) {
+          els.tvBuiltInProxyProxyNode.value = proxyNow;
+        }
+        els.saveProxyNodeBtn.disabled = !proxySupported || proxyNodes.length === 0;
+        els.proxyNodeHint.textContent = proxyNodes.length
+          ? (proxyNow ? ('当前：' + proxyNow) : '未选择')
+          : '无可用节点（请先配置订阅并启动内置代理）';
         const mediaLines = Array.isArray(values.tvBuiltInProxyMediaServerLines) ? values.tvBuiltInProxyMediaServerLines : [];
         els.proxyMediaPreview.textContent = mediaLines.length ? mediaLines.join('\n') : '未添加';
         els.clearProxyMediaBtn.disabled = !proxySupported || mediaLines.length === 0;
+        const diag = String(values.tvBuiltInProxyDiagnostics || '').trim();
+        els.proxyDiagPreview.textContent = diag || '无';
+        els.copyProxyDiagBtn.disabled = !proxySupported || !diag;
 
         setSelectOptions(els.tvBackgroundMode, options.tvBackgroundMode || []);
         const bgMode = String(values.tvBackgroundMode || 'none');
@@ -411,6 +463,11 @@
         tvBuiltInProxySubscriptionUrl: String(els.tvBuiltInProxySubscriptionUrl.value || '').trim(),
       });
     });
+    els.saveProxyNodeBtn.addEventListener('click', async () => {
+      const node = String(els.tvBuiltInProxyProxyNode.value || '').trim();
+      if (!node) { log('无可用节点'); return; }
+      await save({ tvBuiltInProxyProxyNodeSelect: node });
+    });
     els.addProxyMediaBtn.addEventListener('click', async () => {
       const v = String(els.tvBuiltInProxyMediaServerLine.value || '').trim();
       if (!v) { log('请输入线路'); return; }
@@ -421,6 +478,36 @@
       const ok = confirm('确定清空所有线路吗？');
       if (!ok) return;
       await save({ tvBuiltInProxyMediaServerLinesClear: true });
+    });
+    els.refreshProxyDiagBtn.addEventListener('click', async () => {
+      await loadSettings();
+    });
+    els.copyProxyDiagBtn.addEventListener('click', async () => {
+      const text = String(els.proxyDiagPreview.textContent || '').trim();
+      if (!text || text === '无') { log('无诊断信息'); return; }
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(text);
+          log('已复制诊断信息');
+          return;
+        }
+      } catch (e) {
+        // fallback below
+      }
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.left = '-9999px';
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        const ok = document.execCommand('copy');
+        document.body.removeChild(ta);
+        log(ok ? '已复制诊断信息' : '复制失败：浏览器限制');
+      } catch (e) {
+        log('复制失败：' + e);
+      }
     });
     els.tvBackgroundMode.addEventListener('change', async (e) => {
       await save({ tvBackgroundMode: String(e.target.value || 'none') });

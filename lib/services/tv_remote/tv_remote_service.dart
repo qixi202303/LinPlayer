@@ -605,6 +605,16 @@ class TvRemoteService extends ChangeNotifier {
     final subscriptionUrl =
         await BuiltInProxyService.instance.getSubscriptionUrl();
     final mediaLines = await BuiltInProxyService.instance.getMediaServerLines();
+    final proxyDiag = await BuiltInProxyService.instance.buildDiagnosticsText(
+      logLines: 20,
+    );
+
+    BuiltInProxyProxyGroupState? proxyGroup;
+    if (proxy.state == BuiltInProxyState.running) {
+      proxyGroup = await BuiltInProxyService.instance.fetchProxyGroupState(
+        'Proxy',
+      );
+    }
 
     return {
       'ok': true,
@@ -615,6 +625,9 @@ class TvRemoteService extends ChangeNotifier {
         'tvBuiltInProxyMediaServerLines': mediaLines
             .map(BuiltInProxyService.mediaServerLineForDisplay)
             .toList(growable: false),
+        'tvBuiltInProxyProxyNodes': proxyGroup?.all ?? const <String>[],
+        'tvBuiltInProxyProxyNodeSelected': proxyGroup?.now ?? '',
+        'tvBuiltInProxyDiagnostics': proxyDiag,
         'tvBackgroundMode': appState.tvBackgroundMode.id,
         'tvBackgroundColor': appState.tvBackgroundColor,
         'tvBackgroundImage': appState.tvBackgroundImage,
@@ -734,6 +747,16 @@ class TvRemoteService extends ChangeNotifier {
             await BuiltInProxyService.instance
                 .setSubscriptionUrl((value ?? '').toString());
             await BuiltInProxyService.instance.applyConfig(restartIfRunning: true);
+            break;
+          case 'tvBuiltInProxyProxyNodeSelect':
+            final node = (value ?? '').toString().trim();
+            if (node.isEmpty) {
+              return {'ok': false, 'error': 'missing proxy node'};
+            }
+            await BuiltInProxyService.instance.selectProxyInGroup(
+              groupName: 'Proxy',
+              proxyName: node,
+            );
             break;
           case 'tvBuiltInProxyMediaServerLineAdd':
             final raw = (value ?? '').toString();

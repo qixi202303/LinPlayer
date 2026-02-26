@@ -50,6 +50,19 @@ class BuiltInProxyStatus {
       state == BuiltInProxyState.starting || state == BuiltInProxyState.running;
 }
 
+@immutable
+class BuiltInProxyProxyGroupState {
+  final String name;
+  final String? now;
+  final List<String> all;
+
+  const BuiltInProxyProxyGroupState({
+    required this.name,
+    required this.now,
+    required this.all,
+  });
+}
+
 class BuiltInProxyService extends ChangeNotifier {
   BuiltInProxyService._();
 
@@ -64,10 +77,12 @@ class BuiltInProxyService extends ChangeNotifier {
 
   static const Duration _startupTimeout = Duration(seconds: 2);
   static const Duration _shutdownTimeout = Duration(seconds: 2);
+  static const int _maxLogLines = 200;
 
   Process? _process;
   int? _lastExitCode;
   String? _lastError;
+  final List<String> _logTail = <String>[];
 
   BuiltInProxyStatus _status = const BuiltInProxyStatus(
     state: BuiltInProxyState.unsupported,
@@ -213,6 +228,97 @@ class BuiltInProxyService extends ChangeNotifier {
     await refresh();
   }
 
+  static const Duration _controllerTimeout = Duration(milliseconds: 800);
+
+  Future<BuiltInProxyProxyGroupState?> fetchProxyGroupState(
+    String groupName,
+  ) async {
+    final name = groupName.trim();
+    if (name.isEmpty) return null;
+    if (_process == null) return null;
+
+    final uri = Uri.parse(
+      'http://${InternetAddress.loopbackIPv4.address}:$controllerPort/proxies/${Uri.encodeComponent(name)}',
+    );
+
+    final client = HttpClient()
+      ..connectionTimeout = _controllerTimeout
+      ..findProxy = (_) => 'DIRECT';
+    try {
+      final request = await client.getUrl(uri).timeout(_controllerTimeout);
+      request.headers.set(HttpHeaders.acceptHeader, 'application/json');
+      final response = await request.close().timeout(_controllerTimeout);
+      final body = await utf8.decoder.bind(response).join();
+      if (response.statusCode != HttpStatus.ok) return null;
+
+      final decoded = jsonDecode(body);
+      final map =
+          decoded is Map ? decoded.map((k, v) => MapEntry('$k', v)) : null;
+      if (map == null) return null;
+
+      final nowRaw = map['now'];
+      final now = nowRaw is String && nowRaw.trim().isNotEmpty
+          ? nowRaw.trim()
+          : null;
+
+      final allRaw = map['all'];
+      final all = <String>[];
+      if (allRaw is List) {
+        for (final e in allRaw) {
+          final v = e is String ? e.trim() : '';
+          if (v.isNotEmpty) all.add(v);
+        }
+      }
+      return BuiltInProxyProxyGroupState(name: name, now: now, all: all);
+    } catch (_) {
+      return null;
+    } finally {
+      client.close(force: true);
+    }
+  }
+
+  Future<void> selectProxyInGroup({
+    required String groupName,
+    required String proxyName,
+  }) async {
+    final group = groupName.trim();
+    final proxy = proxyName.trim();
+    if (group.isEmpty) {
+      throw StateError('group name is empty');
+    }
+    if (proxy.isEmpty) {
+      throw StateError('proxy name is empty');
+    }
+    if (_process == null) {
+      throw StateError('mihomo is not running');
+    }
+
+    final uri = Uri.parse(
+      'http://${InternetAddress.loopbackIPv4.address}:$controllerPort/proxies/${Uri.encodeComponent(group)}',
+    );
+
+    final client = HttpClient()
+      ..connectionTimeout = _controllerTimeout
+      ..findProxy = (_) => 'DIRECT';
+    try {
+      final request = await client
+          .openUrl('PUT', uri)
+          .timeout(_controllerTimeout);
+      request.headers.contentType = ContentType.json;
+      request.headers.set(HttpHeaders.acceptHeader, 'application/json');
+      request.write(jsonEncode({'name': proxy}));
+      final response = await request.close().timeout(_controllerTimeout);
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        final body = await utf8.decoder.bind(response).join();
+        throw StateError(
+          'select failed: HTTP ${response.statusCode}${body.trim().isEmpty ? '' : ' $body'}',
+        );
+      }
+    } finally {
+      client.close(force: true);
+    }
+  }
+
   static String? _normalizeMediaServerLine(String raw) {
     final input = raw.trim();
     if (input.isEmpty) return null;
@@ -303,12 +409,13 @@ class BuiltInProxyService extends ChangeNotifier {
     final uiRoot = await _ensureMetacubexdReady();
     await _ensureConfigPatched(externalUiDir: uiRoot);
 
-    _lastError = null;
-    _lastExitCode = null;
-    _status = BuiltInProxyStatus(
-      state: BuiltInProxyState.starting,
-      message: '启动中…',
-      executablePath: exe.path,
+     _lastError = null;
+     _lastExitCode = null;
+     _logTail.clear();
+     _status = BuiltInProxyStatus(
+       state: BuiltInProxyState.starting,
+       message: '启动中…',
+       executablePath: exe.path,
       configPath: (await _configFile()).path,
       uiPath: uiRoot?.path,
       mixedPort: mixedPort,
@@ -371,14 +478,14 @@ class BuiltInProxyService extends ChangeNotifier {
           .transform(const LineSplitter())
           .listen(_onLogLine);
 
-      unawaited(
-        process.exitCode.then((code) async {
-          _lastExitCode = code;
-          _process = null;
-          _lastError ??= 'mihomo 已退出：$code';
-          await refresh();
-        }),
-      );
+       unawaited(
+         process.exitCode.then((code) async {
+           _lastExitCode = code;
+           _process = null;
+           _lastError ??= _pickLastErrorFromLogTail() ?? 'mihomo 已退出：$code';
+           await refresh();
+         }),
+       );
 
       await _waitForPort(
         InternetAddress.loopbackIPv4,
@@ -417,16 +524,155 @@ class BuiltInProxyService extends ChangeNotifier {
   }
 
   void _onLogLine(String line) {
-    // MVP: keep last error only; avoid unbounded logs.
-    // Capture useful hints for UI.
-    if (line.trim().isEmpty) return;
+    final trimmed = line.trim();
+    if (trimmed.isEmpty) return;
+
+    _logTail.add(trimmed);
+    if (_logTail.length > _maxLogLines) {
+      _logTail.removeRange(0, _logTail.length - _maxLogLines);
+    }
+
     if (_lastError == null &&
-        (line.toLowerCase().contains('fatal') ||
-            line.toLowerCase().contains('error') ||
-            line.toLowerCase().contains('panic'))) {
-      _lastError = line.trim();
+        (trimmed.toLowerCase().contains('fatal') ||
+            trimmed.toLowerCase().contains('error') ||
+            trimmed.toLowerCase().contains('panic'))) {
+      _lastError = trimmed;
       notifyListeners();
     }
+  }
+
+  String? _pickLastErrorFromLogTail() {
+    if (_logTail.isEmpty) return null;
+    for (var i = _logTail.length - 1; i >= 0; i--) {
+      final v = _logTail[i].trim();
+      if (v.isEmpty) continue;
+      final l = v.toLowerCase();
+      if (l.contains('fatal') || l.contains('error') || l.contains('panic')) {
+        return v;
+      }
+    }
+
+    for (var i = _logTail.length - 1; i >= 0; i--) {
+      final v = _logTail[i].trim();
+      if (v.isNotEmpty) return v;
+    }
+    return null;
+  }
+
+  static String _elfMachineName(int eMachine) {
+    switch (eMachine) {
+      case 3:
+        return 'x86';
+      case 40:
+        return 'ARM';
+      case 62:
+        return 'x86_64';
+      case 183:
+        return 'AArch64';
+      default:
+        return 'e_machine=$eMachine';
+    }
+  }
+
+  static Future<String?> _readElfInfo(String path) async {
+    final p = path.trim();
+    if (p.isEmpty) return null;
+    final f = File(p);
+    if (!await f.exists()) return null;
+
+    try {
+      final raf = await f.open();
+      try {
+        final bytes = await raf.read(64);
+        if (bytes.length < 20) return null;
+        if (bytes[0] != 0x7f ||
+            bytes[1] != 0x45 ||
+            bytes[2] != 0x4c ||
+            bytes[3] != 0x46) {
+          return null;
+        }
+        final elfClass = bytes[4]; // 1=ELF32, 2=ELF64
+        final data = bytes[5]; // 1=little-endian, 2=big-endian
+        final isLittle = data == 1;
+        final eMachine = isLittle
+            ? (bytes[18] | (bytes[19] << 8))
+            : ((bytes[18] << 8) | bytes[19]);
+
+        final cls = switch (elfClass) { 1 => 'ELF32', 2 => 'ELF64', _ => 'ELF?' };
+        final endian = switch (data) { 1 => 'LE', 2 => 'BE', _ => '?' };
+        return '$cls ${_elfMachineName(eMachine)} ($endian)';
+      } finally {
+        await raf.close();
+      }
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static String _formatBytes(int bytes) {
+    if (bytes < 0) return '$bytes';
+    const kb = 1024;
+    const mb = 1024 * 1024;
+    if (bytes >= mb) return '${(bytes / mb).toStringAsFixed(1)}MB';
+    if (bytes >= kb) return '${(bytes / kb).toStringAsFixed(1)}KB';
+    return '${bytes}B';
+  }
+
+  Future<String> buildDiagnosticsText({int logLines = 50}) async {
+    final now = DateTime.now().toIso8601String();
+    final primaryAbi = await DeviceType.primaryAbi();
+    final nativeDir = await DeviceType.nativeLibraryDir();
+    final userExe = await _exeFile();
+    final nativeExe = await _nativeMihomoFile();
+    final cfg = await _configFile();
+
+    final userExists = await userExe.exists();
+    final nativeExists = nativeExe != null && await nativeExe.exists();
+    final effective = userExists
+        ? userExe
+        : nativeExists
+            ? nativeExe
+            : null;
+
+    Future<String> fileLine(File f) async {
+      final size = await f.length().catchError((_) => -1);
+      final elf = await _readElfInfo(f.path);
+      final tail = <String>[
+        if (size >= 0) _formatBytes(size),
+        if (elf != null) elf,
+      ].join(', ');
+      return '${f.path}${tail.isEmpty ? '' : ' ($tail)'}';
+    }
+
+    final b = StringBuffer()
+      ..writeln('== LinPlayer Built-in Proxy Diagnostics ==')
+      ..writeln('time: $now')
+      ..writeln('supported: $isSupported')
+      ..writeln('state: ${_status.state.name}')
+      ..writeln('message: ${_status.message}')
+      ..writeln('primaryAbi: ${primaryAbi ?? ''}')
+      ..writeln('nativeLibraryDir: ${nativeDir ?? ''}')
+      ..writeln('config: ${cfg.path}${await cfg.exists() ? '' : ' (missing)'}')
+      ..writeln('lastExitCode: ${_lastExitCode ?? ''}')
+      ..writeln('lastError: ${_lastError ?? ''}')
+      ..writeln('');
+
+    b.writeln('executables:');
+    b.writeln('  user: ${userExists ? await fileLine(userExe) : '${userExe.path} (missing)'}');
+    b.writeln('  native: ${nativeExe == null ? '(none)' : nativeExists ? await fileLine(nativeExe) : '${nativeExe.path} (missing)'}');
+    b.writeln('  effective: ${effective == null ? '(none)' : await fileLine(effective)}');
+
+    final tail = _logTail;
+    if (tail.isNotEmpty) {
+      final n = logLines.clamp(0, tail.length).toInt();
+      final lines = tail.sublist(tail.length - n);
+      b
+        ..writeln('')
+        ..writeln('logTail(last $n):')
+        ..writeln(lines.join('\n'));
+    }
+
+    return b.toString();
   }
 
   Future<BuiltInProxyStatus> _computeStatus() async {

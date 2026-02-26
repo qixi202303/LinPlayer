@@ -53,6 +53,7 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _tvProxyBusy = false;
   String _tvProxySubscriptionUrl = '';
   List<String> _tvProxyMediaServerLines = const [];
+  String _tvProxyPrimaryAbi = '';
   final ScrollController _scrollController = ScrollController();
   VoidCallback? _primaryFocusListener;
   Timer? _focusEnsureTimer;
@@ -65,6 +66,7 @@ class _SettingsPageState extends State<SettingsPage> {
     unawaited(_refreshCoverCacheSize());
     if (DeviceType.isTv) {
       unawaited(BuiltInProxyService.instance.refresh());
+      unawaited(_loadTvProxyPrimaryAbi());
       unawaited(_loadTvProxySubscriptionUrl());
       unawaited(_loadTvProxyMediaServerLines());
     }
@@ -143,6 +145,14 @@ class _SettingsPageState extends State<SettingsPage> {
       final url = await BuiltInProxyService.instance.getSubscriptionUrl();
       if (!mounted) return;
       setState(() => _tvProxySubscriptionUrl = url);
+    } catch (_) {}
+  }
+
+  Future<void> _loadTvProxyPrimaryAbi() async {
+    try {
+      final abi = await DeviceType.primaryAbi();
+      if (!mounted) return;
+      setState(() => _tvProxyPrimaryAbi = (abi ?? '').trim());
     } catch (_) {}
   }
 
@@ -1493,6 +1503,50 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
+  Future<void> _showBuiltInProxyDiagnostics(BuildContext context) async {
+    if (_tvProxyBusy) return;
+    setState(() => _tvProxyBusy = true);
+
+    late final String text;
+    try {
+      text = await BuiltInProxyService.instance.buildDiagnosticsText();
+    } catch (e) {
+      text = '获取诊断信息失败：$e';
+    } finally {
+      if (mounted) setState(() => _tvProxyBusy = false);
+    }
+
+    if (!context.mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (dctx) => AlertDialog(
+        title: const Text('内核诊断（mihomo）'),
+        content: SizedBox(
+          width: 680,
+          child: SingleChildScrollView(
+            child: SelectableText(text),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              await Clipboard.setData(ClipboardData(text: text));
+              if (!context.mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('已复制诊断信息')),
+              );
+            },
+            child: const Text('复制'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dctx).pop(),
+            child: const Text('关闭'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _editTvProxySubscriptionUrl(BuildContext context) async {
     if (_tvProxyBusy) return;
 
@@ -1850,6 +1904,26 @@ class _SettingsPageState extends State<SettingsPage> {
                                   : () => _openBuiltInProxyPanel(context),
                             ),
                           ],
+                          const Divider(height: 1),
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: const Icon(Icons.bug_report_outlined),
+                            title: const Text('内核诊断'),
+                            subtitle: Text(
+                              '查看内核路径/ABI/日志（排查启动 -6）${_tvProxyPrimaryAbi.trim().isEmpty ? '' : '\n本机 ABI：$_tvProxyPrimaryAbi'}',
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            trailing: FilledButton(
+                              onPressed: _tvProxyBusy
+                                  ? null
+                                  : () => _showBuiltInProxyDiagnostics(context),
+                              child: const Text('查看'),
+                            ),
+                            onTap: _tvProxyBusy
+                                ? null
+                                : () => _showBuiltInProxyDiagnostics(context),
+                          ),
                           if (proxyStatus.state ==
                                   BuiltInProxyState.notInstalled ||
                               proxyStatus.state == BuiltInProxyState.error)
@@ -1857,8 +1931,11 @@ class _SettingsPageState extends State<SettingsPage> {
                               contentPadding: EdgeInsets.zero,
                               leading: const Icon(Icons.file_open_outlined),
                               title: const Text('手动导入 mihomo（可选）'),
-                              subtitle:
-                                  const Text('需要与设备 ABI 匹配（通常 arm64-v8a）'),
+                              subtitle: Text(
+                                _tvProxyPrimaryAbi.trim().isEmpty
+                                    ? '需要与设备 ABI 匹配'
+                                    : '需要与设备 ABI 匹配（本机：$_tvProxyPrimaryAbi）',
+                              ),
                               trailing: FilledButton(
                                 onPressed: _tvProxyBusy
                                     ? null
