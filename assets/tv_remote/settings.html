@@ -83,6 +83,13 @@
       </div>
       <div class="control" style="width: 360px;">
         <select id="tvBuiltInProxyProxyNode"></select>
+        <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px;">
+          <select id="proxyNodeSort">
+            <option value="name">按名称排序</option>
+            <option value="delay">按延迟排序</option>
+          </select>
+          <button type="button" id="pingProxyNodesBtn">检测延迟</button>
+        </div>
         <button type="button" id="saveProxyNodeBtn" style="margin-top: 8px;">应用</button>
         <div class="hint" id="proxyNodeHint"></div>
       </div>
@@ -259,6 +266,8 @@
       saveProxySubBtn: document.getElementById('saveProxySubBtn'),
       proxyNodeRow: document.getElementById('proxyNodeRow'),
       tvBuiltInProxyProxyNode: document.getElementById('tvBuiltInProxyProxyNode'),
+      proxyNodeSort: document.getElementById('proxyNodeSort'),
+      pingProxyNodesBtn: document.getElementById('pingProxyNodesBtn'),
       saveProxyNodeBtn: document.getElementById('saveProxyNodeBtn'),
       proxyNodeHint: document.getElementById('proxyNodeHint'),
       proxyMediaRow: document.getElementById('proxyMediaRow'),
@@ -311,6 +320,90 @@
       });
     };
 
+    let proxyNodesState = [];
+    let proxyNowState = '';
+    let proxyDelayState = {}; // node -> delay(ms) or null
+    let proxyDelayBusy = false;
+
+    const _asDelay = (v) => {
+      const n = Number(v);
+      if (!Number.isFinite(n) || n <= 0) return null;
+      return Math.round(n);
+    };
+
+    const renderProxyNodes = () => {
+      const nodes = Array.isArray(proxyNodesState) ? proxyNodesState.slice() : [];
+      const sort = String(els.proxyNodeSort.value || 'name');
+      const delays = proxyDelayState || {};
+
+      if (sort === 'delay') {
+        nodes.sort((a, b) => {
+          const da = _asDelay(delays[a]);
+          const db = _asDelay(delays[b]);
+          const va = da == null ? Number.POSITIVE_INFINITY : da;
+          const vb = db == null ? Number.POSITIVE_INFINITY : db;
+          if (va !== vb) return va - vb;
+          return String(a).localeCompare(String(b));
+        });
+      } else {
+        nodes.sort((a, b) => String(a).localeCompare(String(b)));
+      }
+
+      const prev = String(els.tvBuiltInProxyProxyNode.value || '').trim();
+      const keep = (prev && nodes.includes(prev)) ? prev : proxyNowState;
+
+      els.tvBuiltInProxyProxyNode.innerHTML = '';
+      nodes.forEach((n) => {
+        const name = String(n);
+        const d = _asDelay(delays[name]);
+        const o = document.createElement('option');
+        o.value = name;
+        o.textContent = d == null ? name : `${name} (${d}ms)`;
+        els.tvBuiltInProxyProxyNode.appendChild(o);
+      });
+
+      if (keep && nodes.includes(keep)) {
+        els.tvBuiltInProxyProxyNode.value = keep;
+      } else if (nodes.length) {
+        els.tvBuiltInProxyProxyNode.value = String(nodes[0]);
+      }
+
+      const measured = Object.values(delays).filter((v) => _asDelay(v) != null).length;
+      if (measured) {
+        els.proxyNodeHint.textContent = `已检测 ${measured}/${nodes.length} 个节点延迟`;
+      } else if (nodes.length) {
+        els.proxyNodeHint.textContent = proxyNowState ? ('当前：' + proxyNowState) : '未选择';
+      } else {
+        els.proxyNodeHint.textContent = '无可用节点（请先配置订阅并启动内置代理）';
+      }
+    };
+
+    const pingProxyNodes = async () => {
+      if (!token) { log('缺少 token'); return; }
+      if (proxyDelayBusy) return;
+      if (!proxyNodesState.length) { log('无可用节点'); return; }
+      proxyDelayBusy = true;
+      els.pingProxyNodesBtn.disabled = true;
+      els.proxyNodeHint.textContent = '正在检测延迟…';
+      try {
+        const res = await apiPost('/api/proxyDelays', {
+          token,
+          nodes: proxyNodesState,
+          timeoutMs: 5000,
+          url: 'http://1.1.1.1/generate_204',
+        });
+        if (!res.ok) throw new Error(res.error || 'unknown');
+        proxyDelayState = res.delays || {};
+        renderProxyNodes();
+      } catch (e) {
+        log('检测延迟失败：' + e);
+        els.proxyNodeHint.textContent = '检测延迟失败';
+      } finally {
+        proxyDelayBusy = false;
+        els.pingProxyNodesBtn.disabled = false;
+      }
+    };
+
     let latest = null;
     const loadSettings = async () => {
       if (!token) return;
@@ -339,19 +432,21 @@
         els.proxyMediaRow.style.display = proxySupported ? '' : 'none';
         els.proxyDiagRow.style.display = proxySupported ? '' : 'none';
         els.tvBuiltInProxySubscriptionUrl.value = String(values.tvBuiltInProxySubscriptionUrl || '');
-        const proxyNodes = Array.isArray(values.tvBuiltInProxyProxyNodes) ? values.tvBuiltInProxyProxyNodes : [];
-        const proxyNow = String(values.tvBuiltInProxyProxyNodeSelected || '').trim();
-        setSelectOptions(
-          els.tvBuiltInProxyProxyNode,
-          proxyNodes.map((n) => ({ id: String(n), label: String(n) })),
-        );
-        if (proxyNow && proxyNodes.includes(proxyNow)) {
-          els.tvBuiltInProxyProxyNode.value = proxyNow;
-        }
-        els.saveProxyNodeBtn.disabled = !proxySupported || proxyNodes.length === 0;
-        els.proxyNodeHint.textContent = proxyNodes.length
-          ? (proxyNow ? ('当前：' + proxyNow) : '未选择')
-          : '无可用节点（请先配置订阅并启动内置代理）';
+        proxyNodesState = Array.isArray(values.tvBuiltInProxyProxyNodes)
+          ? values.tvBuiltInProxyProxyNodes.map((n) => String(n))
+          : [];
+        proxyNowState = String(values.tvBuiltInProxyProxyNodeSelected || '').trim();
+        // Drop stale delays for removed nodes.
+        const nextDelay = {};
+        proxyNodesState.forEach((n) => {
+          if (proxyDelayState && (n in proxyDelayState)) nextDelay[n] = proxyDelayState[n];
+        });
+        proxyDelayState = nextDelay;
+        renderProxyNodes();
+        const hasNodes = proxyNodesState.length > 0;
+        els.saveProxyNodeBtn.disabled = !proxySupported || !hasNodes;
+        els.pingProxyNodesBtn.disabled = !proxySupported || !hasNodes;
+        els.proxyNodeSort.disabled = !proxySupported || !hasNodes;
         const mediaLines = Array.isArray(values.tvBuiltInProxyMediaServerLines) ? values.tvBuiltInProxyMediaServerLines : [];
         els.proxyMediaPreview.textContent = mediaLines.length ? mediaLines.join('\n') : '未添加';
         els.clearProxyMediaBtn.disabled = !proxySupported || mediaLines.length === 0;
@@ -467,6 +562,12 @@
       const node = String(els.tvBuiltInProxyProxyNode.value || '').trim();
       if (!node) { log('无可用节点'); return; }
       await save({ tvBuiltInProxyProxyNodeSelect: node });
+    });
+    els.proxyNodeSort.addEventListener('change', () => {
+      renderProxyNodes();
+    });
+    els.pingProxyNodesBtn.addEventListener('click', async () => {
+      await pingProxyNodes();
     });
     els.addProxyMediaBtn.addEventListener('click', async () => {
       const v = String(els.tvBuiltInProxyMediaServerLine.value || '').trim();

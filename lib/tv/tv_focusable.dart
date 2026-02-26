@@ -141,3 +141,138 @@ class _TvFocusableState extends State<TvFocusable> {
     );
   }
 }
+
+class TvFocusFrame extends StatefulWidget {
+  const TvFocusFrame({
+    super.key,
+    required this.child,
+    this.enabled = true,
+    this.borderRadius = const BorderRadius.all(Radius.circular(16)),
+    this.padding,
+    this.margin,
+    this.surfaceColor,
+    this.focusedSurfaceColor,
+    this.borderColor,
+    this.focusedBorderColor,
+    this.borderWidth = 1.0,
+    this.focusedBorderWidth = 2.0,
+    this.focusScale,
+    this.ensureVisible = true,
+  });
+
+  final Widget child;
+  final bool enabled;
+  final BorderRadius borderRadius;
+  final EdgeInsetsGeometry? padding;
+  final EdgeInsetsGeometry? margin;
+  final Color? surfaceColor;
+  final Color? focusedSurfaceColor;
+  final Color? borderColor;
+  final Color? focusedBorderColor;
+  final double borderWidth;
+  final double focusedBorderWidth;
+  final double? focusScale;
+  final bool ensureVisible;
+
+  @override
+  State<TvFocusFrame> createState() => _TvFocusFrameState();
+}
+
+class _TvFocusFrameState extends State<TvFocusFrame> {
+  final FocusNode _focusNode = FocusNode(debugLabel: 'tv_focus_frame');
+  bool _focused = false;
+
+  void _onFocusChange(bool v) {
+    final next = widget.enabled ? v : false;
+    if (next) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || !widget.ensureVisible) return;
+        Scrollable.ensureVisible(
+          context,
+          alignment: 0.5,
+          duration: const Duration(milliseconds: 120),
+          curve: Curves.easeOut,
+        );
+      });
+    }
+    if (_focused == next) return;
+    setState(() => _focused = next);
+  }
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!widget.enabled) return widget.child;
+
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = scheme.brightness == Brightness.dark;
+    final uiScale = context.uiScale;
+
+    final surfaceColor = widget.surfaceColor ??
+        scheme.surfaceContainerHigh.withValues(alpha: isDark ? 0.40 : 0.72);
+    final focusedSurfaceColor = widget.focusedSurfaceColor ??
+        scheme.primary.withValues(alpha: isDark ? 0.20 : 0.16);
+    final borderColor = widget.borderColor ??
+        scheme.outlineVariant.withValues(alpha: isDark ? 0.60 : 0.72);
+    final focusedBorderColor = widget.focusedBorderColor ?? scheme.primary;
+    final glow = scheme.primary.withValues(alpha: isDark ? 0.55 : 0.40);
+
+    final focusScale = widget.focusScale ?? (1.02 + (uiScale - 1.0) * 0.01);
+    final effectiveScale = _focused ? focusScale : 1.0;
+
+    return Focus(
+      focusNode: _focusNode,
+      canRequestFocus: false,
+      onFocusChange: _onFocusChange,
+      child: Container(
+        margin: widget.margin,
+        child: AnimatedScale(
+          scale: effectiveScale,
+          duration: const Duration(milliseconds: 120),
+          curve: Curves.easeOut,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            curve: Curves.easeOut,
+            decoration: BoxDecoration(
+              color: _focused ? focusedSurfaceColor : surfaceColor,
+              borderRadius: widget.borderRadius,
+              border: Border.all(
+                width: _focused ? widget.focusedBorderWidth : widget.borderWidth,
+                color: _focused ? focusedBorderColor : borderColor,
+              ),
+              boxShadow: !_focused
+                  ? null
+                  : [
+                      BoxShadow(
+                        color: glow,
+                        blurRadius: 18,
+                        spreadRadius: 1.0,
+                      ),
+                      BoxShadow(
+                        color: glow.withValues(alpha: glow.a * 0.55),
+                        blurRadius: 44,
+                        spreadRadius: 0.0,
+                      ),
+                    ],
+            ),
+            child: Material(
+              color: Colors.transparent,
+              shape: RoundedRectangleBorder(borderRadius: widget.borderRadius),
+              clipBehavior: Clip.antiAlias,
+              child: Padding(
+                padding: widget.padding ?? EdgeInsets.zero,
+                child: widget.child,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

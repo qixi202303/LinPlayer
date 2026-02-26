@@ -13,29 +13,70 @@ function wsUrl() {
 
 let socket = null;
 let socketReady = false;
+let connectStartedAt = 0;
+let handshakeMs = null;
+let lastRttMs = null;
+let pingSeq = 0;
+let pingTimer = null;
+const pendingPings = new Map(); // id -> sentAt(ms)
+
+function updateStatus(prefix) {
+  const parts = [prefix];
+  if (handshakeMs != null) parts.push(`握手 ${handshakeMs}ms`);
+  if (lastRttMs != null) parts.push(`延迟 ${lastRttMs}ms`);
+  statusEl.textContent = parts.join(' · ');
+}
 
 function connect() {
   if (!token) {
     statusEl.textContent = '缺少 token：请重新扫码打开。';
     return;
   }
+  if (pingTimer) {
+    clearInterval(pingTimer);
+    pingTimer = null;
+  }
+  pendingPings.clear();
+  connectStartedAt = Date.now();
   socket = new WebSocket(wsUrl());
   socketReady = false;
 
   socket.onopen = () => {
     socketReady = true;
-    statusEl.textContent = '已连接：可遥控 TV';
+    handshakeMs = Date.now() - connectStartedAt;
+    updateStatus('已连接：可遥控 TV');
+    sendPing();
+    pingTimer = setInterval(sendPing, 2000);
+  };
+
+  socket.onmessage = (ev) => {
+    try {
+      const msg = JSON.parse(ev.data);
+      if (!msg || msg.type !== 'pong') return;
+      const id = String(msg.id || '');
+      const sentAt = pendingPings.get(id);
+      if (!sentAt) return;
+      pendingPings.delete(id);
+      lastRttMs = Date.now() - sentAt;
+      updateStatus('已连接：可遥控 TV');
+    } catch (_) {
+      // ignore
+    }
   };
 
   socket.onclose = () => {
     socketReady = false;
-    statusEl.textContent = '连接已断开，正在重连…';
+    handshakeMs = null;
+    lastRttMs = null;
+    updateStatus('连接已断开，正在重连…');
     setTimeout(connect, 800);
   };
 
   socket.onerror = () => {
     socketReady = false;
-    statusEl.textContent = '连接错误，正在重连…';
+    handshakeMs = null;
+    lastRttMs = null;
+    updateStatus('连接错误，正在重连…');
   };
 }
 
@@ -43,6 +84,17 @@ function sendCommand(name, payload = {}) {
   if (!socket || !socketReady) return;
   const msg = { type: 'command', name, ...payload };
   socket.send(JSON.stringify(msg));
+}
+
+function sendPing() {
+  if (!socket || !socketReady) return;
+  const id = String(++pingSeq);
+  pendingPings.set(id, Date.now());
+  try {
+    socket.send(JSON.stringify({ type: 'ping', id }));
+  } catch (_) {
+    // ignore
+  }
 }
 
 // D-pad style commands

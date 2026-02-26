@@ -229,6 +229,7 @@ class BuiltInProxyService extends ChangeNotifier {
   }
 
   static const Duration _controllerTimeout = Duration(milliseconds: 800);
+  static const String _defaultDelayTestUrl = 'http://1.1.1.1/generate_204';
 
   Future<BuiltInProxyProxyGroupState?> fetchProxyGroupState(
     String groupName,
@@ -317,6 +318,90 @@ class BuiltInProxyService extends ChangeNotifier {
     } finally {
       client.close(force: true);
     }
+  }
+
+  Future<int?> fetchProxyDelayMs(
+    String proxyName, {
+    String url = _defaultDelayTestUrl,
+    Duration timeout = const Duration(milliseconds: 5000),
+  }) async {
+    final name = proxyName.trim();
+    if (name.isEmpty) return null;
+    if (_process == null) return null;
+
+    final timeoutMs = timeout.inMilliseconds.clamp(500, 15000);
+    final testUrl = url.trim().isEmpty ? _defaultDelayTestUrl : url.trim();
+
+    final uri = Uri.parse(
+      'http://${InternetAddress.loopbackIPv4.address}:$controllerPort/proxies/${Uri.encodeComponent(name)}/delay',
+    ).replace(
+      queryParameters: {
+        'timeout': timeoutMs.toString(),
+        'url': testUrl,
+      },
+    );
+
+    final client = HttpClient()
+      ..connectionTimeout = _controllerTimeout
+      ..findProxy = (_) => 'DIRECT';
+    try {
+      final request = await client.getUrl(uri).timeout(_controllerTimeout);
+      request.headers.set(HttpHeaders.acceptHeader, 'application/json');
+      final response = await request
+          .close()
+          .timeout(Duration(milliseconds: timeoutMs) + _controllerTimeout);
+      if (response.statusCode != HttpStatus.ok) return null;
+
+      final body = await utf8.decoder.bind(response).join();
+      final decoded = jsonDecode(body);
+      final map =
+          decoded is Map ? decoded.map((k, v) => MapEntry('$k', v)) : null;
+      if (map == null) return null;
+
+      final raw = map['delay'];
+      final ms = raw is num ? raw.toInt() : int.tryParse(raw?.toString() ?? '');
+      if (ms == null || ms <= 0) return null;
+      return ms;
+    } catch (_) {
+      return null;
+    } finally {
+      client.close(force: true);
+    }
+  }
+
+  Future<Map<String, int?>> fetchProxyDelayMsBatch(
+    Iterable<String> proxyNames, {
+    String url = _defaultDelayTestUrl,
+    Duration timeout = const Duration(milliseconds: 5000),
+    int maxConcurrency = 6,
+  }) async {
+    final unique = <String>{};
+    for (final raw in proxyNames) {
+      final v = raw.trim();
+      if (v.isEmpty) continue;
+      unique.add(v);
+    }
+
+    final names = unique.toList(growable: false);
+    final out = <String, int?>{};
+    if (names.isEmpty) return out;
+
+    final concurrency = maxConcurrency.clamp(1, 12);
+    for (var i = 0; i < names.length; i += concurrency) {
+      final end = (i + concurrency) > names.length ? names.length : i + concurrency;
+      final batch = names.sublist(i, end);
+      final results = await Future.wait(
+        batch.map((n) async => MapEntry(n, await fetchProxyDelayMs(
+          n,
+          url: url,
+          timeout: timeout,
+        ))),
+      );
+      for (final e in results) {
+        out[e.key] = e.value;
+      }
+    }
+    return out;
   }
 
   static String? _normalizeMediaServerLine(String raw) {

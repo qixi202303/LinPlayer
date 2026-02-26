@@ -225,6 +225,133 @@ class TvRemoteService extends ChangeNotifier {
         return;
       }
 
+      if (path == '/api/ping') {
+        final token = request.uri.queryParameters['token'] ?? '';
+        if (!_checkToken(token)) {
+          response.statusCode = HttpStatus.unauthorized;
+          response.headers.set(
+            HttpHeaders.contentTypeHeader,
+            'application/json; charset=utf-8',
+          );
+          response.write(jsonEncode({'ok': false, 'error': 'unauthorized'}));
+          return;
+        }
+        response.statusCode = HttpStatus.ok;
+        response.headers.set(
+          HttpHeaders.contentTypeHeader,
+          'application/json; charset=utf-8',
+        );
+        response.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
+        response.write(
+          jsonEncode({
+            'ok': true,
+            'ts': DateTime.now().millisecondsSinceEpoch,
+          }),
+        );
+        return;
+      }
+
+      if (path == '/api/proxyDelays') {
+        if (request.method.toUpperCase() != 'POST') {
+          response.statusCode = HttpStatus.methodNotAllowed;
+          response.headers.set(HttpHeaders.allowHeader, 'POST');
+          return;
+        }
+
+        final raw = await utf8.decoder.bind(request).join();
+        final decoded = jsonDecode(raw);
+        final map =
+            decoded is Map ? decoded.map((k, v) => MapEntry('$k', v)) : null;
+        if (map == null) {
+          response.statusCode = HttpStatus.badRequest;
+          response.headers.set(
+            HttpHeaders.contentTypeHeader,
+            'application/json; charset=utf-8',
+          );
+          response.write(jsonEncode({'ok': false, 'error': 'invalid json'}));
+          return;
+        }
+
+        final token = (map['token'] ?? '').toString().trim();
+        if (!_checkToken(token)) {
+          response.statusCode = HttpStatus.unauthorized;
+          response.headers.set(
+            HttpHeaders.contentTypeHeader,
+            'application/json; charset=utf-8',
+          );
+          response.write(jsonEncode({'ok': false, 'error': 'unauthorized'}));
+          return;
+        }
+
+        final proxy = BuiltInProxyService.instance.status;
+        if (!proxy.isSupported) {
+          response.statusCode = HttpStatus.ok;
+          response.headers.set(
+            HttpHeaders.contentTypeHeader,
+            'application/json; charset=utf-8',
+          );
+          response.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
+          response.write(
+            jsonEncode({'ok': false, 'error': 'built-in proxy not supported'}),
+          );
+          return;
+        }
+        if (proxy.state != BuiltInProxyState.running) {
+          response.statusCode = HttpStatus.ok;
+          response.headers.set(
+            HttpHeaders.contentTypeHeader,
+            'application/json; charset=utf-8',
+          );
+          response.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
+          response.write(
+            jsonEncode({'ok': false, 'error': 'built-in proxy not running'}),
+          );
+          return;
+        }
+
+        final nodesRaw = map['nodes'];
+        final nodes = <String>[];
+        if (nodesRaw is List) {
+          for (final e in nodesRaw) {
+            final v = e is String ? e.trim() : e?.toString().trim() ?? '';
+            if (v.isEmpty) continue;
+            nodes.add(v);
+          }
+        }
+        if (nodes.isEmpty) {
+          response.statusCode = HttpStatus.ok;
+          response.headers.set(
+            HttpHeaders.contentTypeHeader,
+            'application/json; charset=utf-8',
+          );
+          response.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
+          response.write(jsonEncode({'ok': false, 'error': 'missing nodes'}));
+          return;
+        }
+
+        final url = (map['url'] ?? '').toString().trim();
+        final timeoutMs = int.tryParse((map['timeoutMs'] ?? '').toString()) ?? 5000;
+        final delays = await BuiltInProxyService.instance.fetchProxyDelayMsBatch(
+          nodes,
+          url: url.isEmpty ? 'http://1.1.1.1/generate_204' : url,
+          timeout: Duration(milliseconds: timeoutMs.clamp(500, 15000)),
+        );
+
+        response.statusCode = HttpStatus.ok;
+        response.headers.set(
+          HttpHeaders.contentTypeHeader,
+          'application/json; charset=utf-8',
+        );
+        response.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
+        response.write(
+          jsonEncode({
+            'ok': true,
+            'delays': delays,
+          }),
+        );
+        return;
+      }
+
       if (path == '/api/settings') {
         final method = request.method.toUpperCase();
         if (method == 'GET') {
@@ -422,14 +549,14 @@ class TvRemoteService extends ChangeNotifier {
 
     _wsClients.add(ws);
     ws.listen(
-      (event) => _onWsEvent(event),
+      (event) => _onWsEvent(ws, event),
       onDone: () => _wsClients.remove(ws),
       onError: (_) => _wsClients.remove(ws),
       cancelOnError: true,
     );
   }
 
-  void _onWsEvent(dynamic event) {
+  void _onWsEvent(WebSocket ws, dynamic event) {
     if (event is! String) return;
     try {
       final decoded = jsonDecode(event);
@@ -438,6 +565,19 @@ class TvRemoteService extends ChangeNotifier {
       if (map == null) return;
 
       final type = (map['type'] ?? '').toString().trim();
+      if (type == 'ping') {
+        final id = (map['id'] ?? '').toString();
+        try {
+          ws.add(
+            jsonEncode({
+              'type': 'pong',
+              'id': id,
+              'ts': DateTime.now().millisecondsSinceEpoch,
+            }),
+          );
+        } catch (_) {}
+        return;
+      }
       if (type != 'command') return;
       final name = (map['name'] ?? '').toString().trim();
       if (name.isEmpty) return;

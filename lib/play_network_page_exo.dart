@@ -130,8 +130,21 @@ class _ExoPlayNetworkPageState extends State<ExoPlayNetworkPage>
       FocusNode(debugLabel: 'network_exo_player_tv_surface');
   final FocusNode _tvPlayPauseFocusNode =
       FocusNode(debugLabel: 'network_exo_player_tv_play_pause');
+  final FocusNode _tvEpisodeSelectedFocusNode =
+      FocusNode(debugLabel: 'network_exo_player_tv_episode_selected');
+  final FocusNode _tvEpisodeFallbackFocusNode =
+      FocusNode(debugLabel: 'network_exo_player_tv_episode_fallback');
+  final FocusNode _tvSubtitleSelectedFocusNode =
+      FocusNode(debugLabel: 'network_exo_player_tv_subtitle_selected');
+  final FocusNode _tvSubtitleFallbackFocusNode =
+      FocusNode(debugLabel: 'network_exo_player_tv_subtitle_fallback');
+  final FocusNode _tvAudioSelectedFocusNode =
+      FocusNode(debugLabel: 'network_exo_player_tv_audio_selected');
+  final FocusNode _tvAudioFallbackFocusNode =
+      FocusNode(debugLabel: 'network_exo_player_tv_audio_fallback');
 
   int _tvBottomPanelIndex = 0; // 0=playback, 1=episodes, 2=subtitles, 3=audio
+  int? _tvPendingBottomPanelFocus;
   DateTime? _tvNetSpeedLastPollAt;
 
   bool _tvSubtitleTracksLoading = false;
@@ -313,6 +326,12 @@ class _ExoPlayNetworkPageState extends State<ExoPlayNetworkPage>
     _controller = null;
     _tvSurfaceFocusNode.dispose();
     _tvPlayPauseFocusNode.dispose();
+    _tvEpisodeSelectedFocusNode.dispose();
+    _tvEpisodeFallbackFocusNode.dispose();
+    _tvSubtitleSelectedFocusNode.dispose();
+    _tvSubtitleFallbackFocusNode.dispose();
+    _tvAudioSelectedFocusNode.dispose();
+    _tvAudioFallbackFocusNode.dispose();
     super.dispose();
   }
 
@@ -1840,6 +1859,10 @@ class _ExoPlayNetworkPageState extends State<ExoPlayNetworkPage>
     final next = index.clamp(0, _tvBottomPanelCount - 1);
     if (_tvBottomPanelIndex == next) return;
     setState(() => _tvBottomPanelIndex = next);
+    _tvPendingBottomPanelFocus = next;
+    if (next == 0) {
+      _focusTvPlayPause();
+    }
     if (next == 1) {
       // ignore: unawaited_futures
       _ensureEpisodePickerLoaded();
@@ -1865,6 +1888,19 @@ class _ExoPlayNetworkPageState extends State<ExoPlayNetworkPage>
     // Don't wrap backwards: keep arrow-up behavior predictable.
     if (_tvBottomPanelIndex <= 0) return;
     _setTvBottomPanel(_tvBottomPanelIndex - 1);
+  }
+
+  void _requestTvBottomPanelFocusIfNeeded(int panelIndex, FocusNode node) {
+    if (!widget.isTv) return;
+    if (_tvPendingBottomPanelFocus != panelIndex) return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_tvBottomPanelIndex != panelIndex) return;
+      if (_tvPendingBottomPanelFocus != panelIndex) return;
+      FocusScope.of(context).requestFocus(node);
+      _tvPendingBottomPanelFocus = null;
+    });
   }
 
   String _tvTitleText() {
@@ -2174,6 +2210,7 @@ class _ExoPlayNetworkPageState extends State<ExoPlayNetworkPage>
     bool autofocus = false,
     bool selected = false,
     IconData? icon,
+    FocusNode? focusNode,
   }) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
@@ -2192,6 +2229,7 @@ class _ExoPlayNetworkPageState extends State<ExoPlayNetworkPage>
         scheme.primary.withValues(alpha: isDark ? 0.38 : 0.22);
 
     return TvFocusable(
+      focusNode: focusNode,
       autofocus: autofocus,
       enabled: onPressed != null,
       onPressed: onPressed,
@@ -2267,23 +2305,31 @@ class _ExoPlayNetworkPageState extends State<ExoPlayNetworkPage>
               if (snapshot.hasError) {
                 return const Center(child: Text('加载剧集失败'));
               }
-              final eps = snapshot.data ?? const <MediaItem>[];
-              if (eps.isEmpty) {
-                return const Center(child: Text('暂无剧集'));
-              }
+                final eps = snapshot.data ?? const <MediaItem>[];
+                if (eps.isEmpty) {
+                  return const Center(child: Text('暂无剧集'));
+                }
 
-              return SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
-                    for (final entry in eps.asMap().entries) ...[
-                      if (entry.key > 0) const SizedBox(width: 10),
-                      _buildTvChip(
-                        autofocus: entry.key == 0,
-                        selected: entry.value.id == widget.itemId,
-                        label: (entry.value.episodeNumber ?? (entry.key + 1))
-                            .toString(),
-                        onPressed: !enabled
+                final selectedIndex = eps.indexWhere((e) => e.id == widget.itemId);
+                final focusNode = selectedIndex >= 0
+                    ? _tvEpisodeSelectedFocusNode
+                    : _tvEpisodeFallbackFocusNode;
+                final autofocusIndex = selectedIndex >= 0 ? selectedIndex : 0;
+                _requestTvBottomPanelFocusIfNeeded(1, focusNode);
+
+                return SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      for (final entry in eps.asMap().entries) ...[
+                        if (entry.key > 0) const SizedBox(width: 10),
+                        _buildTvChip(
+                          autofocus: entry.key == autofocusIndex,
+                          focusNode: entry.key == autofocusIndex ? focusNode : null,
+                          selected: entry.value.id == widget.itemId,
+                          label: (entry.value.episodeNumber ?? (entry.key + 1))
+                              .toString(),
+                          onPressed: !enabled
                             ? null
                             : () => _playEpisodeFromPicker(entry.value),
                       ),
@@ -2312,6 +2358,7 @@ class _ExoPlayNetworkPageState extends State<ExoPlayNetworkPage>
     final offSelected = selected.isEmpty;
 
     if (tracks.isEmpty) {
+      _requestTvBottomPanelFocusIfNeeded(2, _tvSubtitleFallbackFocusNode);
       return Row(
         children: [
           _buildTvChip(
@@ -2319,6 +2366,7 @@ class _ExoPlayNetworkPageState extends State<ExoPlayNetworkPage>
             selected: offSelected,
             label: '关闭',
             icon: Icons.subtitles_off_outlined,
+            focusNode: _tvSubtitleFallbackFocusNode,
             onPressed: enabled ? () => _tvSelectSubtitleTrack(null) : null,
           ),
           const SizedBox(width: 12),
@@ -2327,23 +2375,34 @@ class _ExoPlayNetworkPageState extends State<ExoPlayNetworkPage>
       );
     }
 
+    final selectedIndex = tracks.indexWhere((t) => t.isSelected);
+    final hasSelected = selectedIndex >= 0;
+    _requestTvBottomPanelFocusIfNeeded(
+      2,
+      hasSelected ? _tvSubtitleSelectedFocusNode : _tvSubtitleFallbackFocusNode,
+    );
+
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
         children: [
           _buildTvChip(
-            autofocus: true,
+            autofocus: !hasSelected,
             selected: offSelected,
             label: '关闭',
             icon: Icons.subtitles_off_outlined,
+            focusNode: _tvSubtitleFallbackFocusNode,
             onPressed: enabled ? () => _tvSelectSubtitleTrack(null) : null,
           ),
           for (final entry in tracks.asMap().entries) ...[
             const SizedBox(width: 10),
             _buildTvChip(
+              autofocus: hasSelected && entry.key == selectedIndex,
               selected: entry.value.isSelected,
               label: _subtitleTrackTitle(entry.value),
               icon: Icons.subtitles_outlined,
+              focusNode:
+                  hasSelected && entry.key == selectedIndex ? _tvSubtitleSelectedFocusNode : null,
               onPressed: !enabled
                   ? null
                   : () => _tvSelectSubtitleTrack(entry.value),
@@ -2368,6 +2427,13 @@ class _ExoPlayNetworkPageState extends State<ExoPlayNetworkPage>
       return const Center(child: Text('暂无音轨'));
     }
 
+    final selectedIndex = tracks.indexWhere((t) => t.isSelected);
+    final focusNode = selectedIndex >= 0
+        ? _tvAudioSelectedFocusNode
+        : _tvAudioFallbackFocusNode;
+    final autofocusIndex = selectedIndex >= 0 ? selectedIndex : 0;
+    _requestTvBottomPanelFocusIfNeeded(3, focusNode);
+
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
@@ -2375,10 +2441,11 @@ class _ExoPlayNetworkPageState extends State<ExoPlayNetworkPage>
           for (final entry in tracks.asMap().entries) ...[
             if (entry.key > 0) const SizedBox(width: 10),
             _buildTvChip(
-              autofocus: entry.key == 0,
+              autofocus: entry.key == autofocusIndex,
               selected: entry.value.isSelected,
               label: _audioTrackTitle(entry.value),
               icon: Icons.audiotrack_outlined,
+              focusNode: entry.key == autofocusIndex ? focusNode : null,
               onPressed:
                   enabled ? () => _tvSelectAudioTrack(entry.value) : null,
             ),
@@ -4807,12 +4874,14 @@ class _ExoPlayNetworkPageState extends State<ExoPlayNetworkPage>
 
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
-        if (key == LogicalKeyboardKey.arrowLeft) {
+        final allowSeek = !widget.isTv || _tvBottomPanelIndex == 0;
+
+        if (allowSeek && key == LogicalKeyboardKey.arrowLeft) {
           // ignore: unawaited_futures
           _seekRelative(Duration(seconds: -_seekBackSeconds));
           return KeyEventResult.handled;
         }
-        if (key == LogicalKeyboardKey.arrowRight) {
+        if (allowSeek && key == LogicalKeyboardKey.arrowRight) {
           // ignore: unawaited_futures
           _seekRelative(Duration(seconds: _seekForwardSeconds));
           return KeyEventResult.handled;

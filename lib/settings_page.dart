@@ -21,6 +21,7 @@ import 'services/app_update_flow.dart';
 import 'services/app_update_service.dart';
 import 'services/built_in_proxy/built_in_proxy_service.dart';
 import 'services/tv_remote/tv_remote_service.dart';
+import 'tv/tv_focusable.dart';
 import 'tv_proxy_panel_page.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -1737,6 +1738,25 @@ class _SettingsPageState extends State<SettingsPage> {
             .clamp(140.0, 260.0)
             .toDouble();
 
+        Widget tvFocusRow(Widget child) {
+          if (!isTv) return child;
+          final scheme = Theme.of(context).colorScheme;
+          final isDark = scheme.brightness == Brightness.dark;
+          final uiScale = context.uiScale;
+          final radius = (18 * uiScale).clamp(14.0, 22.0);
+          return TvFocusFrame(
+            borderRadius: BorderRadius.circular(radius),
+            surfaceColor: Colors.transparent,
+            focusedSurfaceColor:
+                scheme.primary.withValues(alpha: isDark ? 0.22 : 0.16),
+            borderColor: Colors.transparent,
+            focusedBorderColor: scheme.primary,
+            padding: EdgeInsets.zero,
+            focusScale: 1.03,
+            child: child,
+          );
+        }
+
         return Scaffold(
           appBar: GlassAppBar(
             enableBlur: enableBlur,
@@ -1795,156 +1815,177 @@ class _SettingsPageState extends State<SettingsPage> {
                           ? '未添加（可强制媒体服务器走代理）'
                           : '已添加 ${mediaLines.length} 条：$mediaPreview${mediaLines.length > 2 ? '…' : ''}';
 
-                      return Column(
-                        children: [
-                          SwitchListTile(
-                            autofocus: true,
-                            contentPadding: EdgeInsets.zero,
-                            secondary: const Icon(Icons.qr_code_2_outlined),
-                            title: const Text('手机扫码控制'),
-                            subtitle: Text(statusText),
-                            value: enabled,
-                            onChanged: _tvRemoteBusy
-                                ? null
-                                : (v) => _setTvRemoteEnabled(context, v),
+                        return Column(
+                          children: [
+                          tvFocusRow(
+                            SwitchListTile(
+                              autofocus: true,
+                              contentPadding: EdgeInsets.zero,
+                              secondary: const Icon(Icons.qr_code_2_outlined),
+                              title: const Text('手机扫码控制'),
+                              subtitle: Text(statusText),
+                              value: enabled,
+                              onChanged: _tvRemoteBusy
+                                  ? null
+                                  : (v) => _setTvRemoteEnabled(context, v),
+                            ),
                           ),
                           if (enabled) ...[
                             const Divider(height: 1),
-                            ListTile(
-                              contentPadding: EdgeInsets.zero,
-                              leading: const Icon(Icons.link_outlined),
-                              title: const Text('配对地址'),
-                              subtitle: Text(addressText),
-                              trailing: url == null
-                                  ? null
-                                  : IconButton(
-                                      tooltip: '显示二维码',
-                                      onPressed: () =>
-                                          _showTvRemoteQrDialog(context),
-                                      icon: const Icon(Icons.qr_code),
-                                    ),
+                            tvFocusRow(
+                              ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                leading: const Icon(Icons.link_outlined),
+                                title: const Text('配对地址'),
+                                subtitle: Text(addressText),
+                                trailing: url == null
+                                    ? null
+                                    : IconButton(
+                                        tooltip: '显示二维码',
+                                        onPressed: () =>
+                                            _showTvRemoteQrDialog(context),
+                                        icon: const Icon(Icons.qr_code),
+                                      ),
+                              ),
                             ),
                           ],
                           const Divider(height: 1),
-                          SwitchListTile(
-                            contentPadding: EdgeInsets.zero,
-                            secondary: const Icon(Icons.shield_outlined),
-                            title: const Text('内置代理（mihomo）'),
-                            subtitle: Text(proxyStatusText),
-                            value: proxyEnabled,
-                            onChanged: _tvProxyBusy
-                                ? null
-                                : (v) => _setTvBuiltInProxyEnabled(context, v),
+                          tvFocusRow(
+                            SwitchListTile(
+                              contentPadding: EdgeInsets.zero,
+                              secondary: const Icon(Icons.shield_outlined),
+                              title: const Text('内置代理（mihomo）'),
+                              subtitle: Text(proxyStatusText),
+                              value: proxyEnabled,
+                              onChanged: _tvProxyBusy
+                                  ? null
+                                  : (v) =>
+                                      _setTvBuiltInProxyEnabled(context, v),
+                            ),
                           ),
                           const Divider(height: 1),
-                          ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            leading: const Icon(Icons.link_outlined),
-                            title: const Text('订阅地址（可选）'),
-                            subtitle: Text(
-                              _tvProxySubscriptionUrl.trim().isEmpty
-                                  ? '未设置（将以 DIRECT 模式启动）'
-                                  : _tvProxySubscriptionUrl,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            trailing: FilledButton(
-                              onPressed: _tvProxyBusy
-                                  ? null
-                                  : () => _editTvProxySubscriptionUrl(context),
-                              child: Text(
-                                _tvProxySubscriptionUrl.trim().isEmpty
-                                    ? '设置'
-                                    : '编辑',
-                              ),
-                            ),
-                            onTap: _tvProxyBusy
-                                ? null
-                                : () => _editTvProxySubscriptionUrl(context),
-                          ),
-                          const Divider(height: 1),
-                          ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            leading: const Icon(Icons.alt_route_outlined),
-                            title: const Text('添加线路'),
-                            subtitle: Text(
-                              mediaSubtitle,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            trailing: FilledButton(
-                              onPressed: _tvProxyBusy
-                                  ? null
-                                  : () => _editTvProxyMediaServerLines(context),
-                              child: Text(mediaLines.isEmpty ? '添加' : '管理'),
-                            ),
-                            onTap: _tvProxyBusy
-                                ? null
-                                : () => _editTvProxyMediaServerLines(context),
-                          ),
-                          if (proxyEnabled) ...[
-                            const Divider(height: 1),
+                          tvFocusRow(
                             ListTile(
                               contentPadding: EdgeInsets.zero,
-                              leading: const Icon(Icons.web_outlined),
-                              title: const Text('代理面板（metacubexd）'),
+                              leading: const Icon(Icons.link_outlined),
+                              title: const Text('订阅地址（可选）'),
                               subtitle: Text(
-                                proxyStatus.uiPath == null
-                                    ? '未内置面板资源'
-                                    : '本机打开：127.0.0.1:${BuiltInProxyService.controllerPort}/ui/',
+                                _tvProxySubscriptionUrl.trim().isEmpty
+                                    ? '未设置（将以 DIRECT 模式启动）'
+                                    : _tvProxySubscriptionUrl,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
                               ),
                               trailing: FilledButton(
                                 onPressed: _tvProxyBusy
                                     ? null
-                                    : () => _openBuiltInProxyPanel(context),
-                                child: const Text('打开'),
+                                    : () =>
+                                        _editTvProxySubscriptionUrl(context),
+                                child: Text(
+                                  _tvProxySubscriptionUrl.trim().isEmpty
+                                      ? '设置'
+                                      : '编辑',
+                                ),
                               ),
                               onTap: _tvProxyBusy
                                   ? null
-                                  : () => _openBuiltInProxyPanel(context),
+                                  : () =>
+                                      _editTvProxySubscriptionUrl(context),
+                            ),
+                          ),
+                          const Divider(height: 1),
+                          tvFocusRow(
+                            ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: const Icon(Icons.alt_route_outlined),
+                              title: const Text('添加线路'),
+                              subtitle: Text(
+                                mediaSubtitle,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              trailing: FilledButton(
+                                onPressed: _tvProxyBusy
+                                    ? null
+                                    : () =>
+                                        _editTvProxyMediaServerLines(context),
+                                child: Text(mediaLines.isEmpty ? '添加' : '管理'),
+                              ),
+                              onTap: _tvProxyBusy
+                                  ? null
+                                  : () => _editTvProxyMediaServerLines(context),
+                            ),
+                          ),
+                          if (proxyEnabled) ...[
+                            const Divider(height: 1),
+                            tvFocusRow(
+                              ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                leading: const Icon(Icons.web_outlined),
+                                title: const Text('代理面板（metacubexd）'),
+                                subtitle: Text(
+                                  proxyStatus.uiPath == null
+                                      ? '未内置面板资源'
+                                      : '本机打开：127.0.0.1:${BuiltInProxyService.controllerPort}/ui/',
+                                ),
+                                trailing: FilledButton(
+                                  onPressed: _tvProxyBusy
+                                      ? null
+                                      : () => _openBuiltInProxyPanel(context),
+                                  child: const Text('打开'),
+                                ),
+                                onTap: _tvProxyBusy
+                                    ? null
+                                    : () => _openBuiltInProxyPanel(context),
+                              ),
                             ),
                           ],
                           const Divider(height: 1),
-                          ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            leading: const Icon(Icons.bug_report_outlined),
-                            title: const Text('内核诊断'),
-                            subtitle: Text(
-                              '查看内核路径/ABI/日志（排查启动 -6）${_tvProxyPrimaryAbi.trim().isEmpty ? '' : '\n本机 ABI：$_tvProxyPrimaryAbi'}',
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            trailing: FilledButton(
-                              onPressed: _tvProxyBusy
+                          tvFocusRow(
+                            ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: const Icon(Icons.bug_report_outlined),
+                              title: const Text('内核诊断'),
+                              subtitle: Text(
+                                '查看内核路径/ABI/日志（排查启动 -6）${_tvProxyPrimaryAbi.trim().isEmpty ? '' : '\n本机 ABI：$_tvProxyPrimaryAbi'}',
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              trailing: FilledButton(
+                                onPressed: _tvProxyBusy
+                                    ? null
+                                    : () =>
+                                        _showBuiltInProxyDiagnostics(context),
+                                child: const Text('查看'),
+                              ),
+                              onTap: _tvProxyBusy
                                   ? null
                                   : () => _showBuiltInProxyDiagnostics(context),
-                              child: const Text('查看'),
                             ),
-                            onTap: _tvProxyBusy
-                                ? null
-                                : () => _showBuiltInProxyDiagnostics(context),
                           ),
                           if (proxyStatus.state ==
                                   BuiltInProxyState.notInstalled ||
                               proxyStatus.state == BuiltInProxyState.error)
-                            ListTile(
-                              contentPadding: EdgeInsets.zero,
-                              leading: const Icon(Icons.file_open_outlined),
-                              title: const Text('手动导入 mihomo（可选）'),
-                              subtitle: Text(
-                                _tvProxyPrimaryAbi.trim().isEmpty
-                                    ? '需要与设备 ABI 匹配'
-                                    : '需要与设备 ABI 匹配（本机：$_tvProxyPrimaryAbi）',
-                              ),
-                              trailing: FilledButton(
-                                onPressed: _tvProxyBusy
+                            tvFocusRow(
+                              ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                leading: const Icon(Icons.file_open_outlined),
+                                title: const Text('手动导入 mihomo（可选）'),
+                                subtitle: Text(
+                                  _tvProxyPrimaryAbi.trim().isEmpty
+                                      ? '需要与设备 ABI 匹配'
+                                      : '需要与设备 ABI 匹配（本机：$_tvProxyPrimaryAbi）',
+                                ),
+                                trailing: FilledButton(
+                                  onPressed: _tvProxyBusy
+                                      ? null
+                                      : () => _importMihomoBinary(context),
+                                  child: const Text('导入'),
+                                ),
+                                onTap: _tvProxyBusy
                                     ? null
                                     : () => _importMihomoBinary(context),
-                                child: const Text('导入'),
                               ),
-                              onTap: _tvProxyBusy
-                                  ? null
-                                  : () => _importMihomoBinary(context),
                             ),
                           if (proxyStatus.configPath != null) ...[
                             const Divider(height: 1),
@@ -2015,58 +2056,65 @@ class _SettingsPageState extends State<SettingsPage> {
                                   .toRadixString(16)
                                   .padLeft(8, '0')
                                   .toUpperCase();
-                              return ListTile(
-                                contentPadding: EdgeInsets.zero,
-                                leading: const Icon(
-                                    Icons.format_color_fill_outlined),
-                                title: const Text('背景颜色'),
-                                subtitle: Text('#$v'),
-                                trailing: CircleAvatar(
-                                  radius: 12,
-                                  backgroundColor:
-                                      Color(appState.tvBackgroundColor),
+                              return tvFocusRow(
+                                ListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  leading: const Icon(
+                                      Icons.format_color_fill_outlined),
+                                  title: const Text('背景颜色'),
+                                  subtitle: Text('#$v'),
+                                  trailing: CircleAvatar(
+                                    radius: 12,
+                                    backgroundColor:
+                                        Color(appState.tvBackgroundColor),
+                                  ),
+                                  onTap: () => _pickTvBackgroundColor(context),
                                 ),
-                                onTap: () => _pickTvBackgroundColor(context),
                               );
                             case TvBackgroundMode.image:
                               final img = appState.tvBackgroundImage.trim();
-                              return ListTile(
-                                contentPadding: EdgeInsets.zero,
-                                leading: const Icon(Icons.image_outlined),
-                                title: const Text('背景图片'),
-                                subtitle: Text(
-                                  img.isEmpty ? '未设置' : img,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
+                              return tvFocusRow(
+                                ListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  leading: const Icon(Icons.image_outlined),
+                                  title: const Text('背景图片'),
+                                  subtitle: Text(
+                                    img.isEmpty ? '未设置' : img,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  trailing: FilledButton(
+                                    onPressed: () =>
+                                        _editTvBackgroundImage(context),
+                                    child: const Text('设置'),
+                                  ),
+                                  onTap: () => _editTvBackgroundImage(context),
                                 ),
-                                trailing: FilledButton(
-                                  onPressed: () =>
-                                      _editTvBackgroundImage(context),
-                                  child: const Text('设置'),
-                                ),
-                                onTap: () => _editTvBackgroundImage(context),
                               );
                             case TvBackgroundMode.randomApi:
                               final api =
                                   appState.tvBackgroundRandomApiUrl.trim();
                               return Column(
                                 children: [
-                                  ListTile(
-                                    contentPadding: EdgeInsets.zero,
-                                    leading: const Icon(Icons.public_outlined),
-                                    title: const Text('随机背景 API'),
-                                    subtitle: Text(
-                                      api.isEmpty ? '未设置' : api,
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    trailing: FilledButton(
-                                      onPressed: () =>
+                                  tvFocusRow(
+                                    ListTile(
+                                      contentPadding: EdgeInsets.zero,
+                                      leading:
+                                          const Icon(Icons.public_outlined),
+                                      title: const Text('随机背景 API'),
+                                      subtitle: Text(
+                                        api.isEmpty ? '未设置' : api,
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      trailing: FilledButton(
+                                        onPressed: () =>
+                                            _editTvBackgroundRandomApi(context),
+                                        child: const Text('修改'),
+                                      ),
+                                      onTap: () =>
                                           _editTvBackgroundRandomApi(context),
-                                      child: const Text('修改'),
                                     ),
-                                    onTap: () =>
-                                        _editTvBackgroundRandomApi(context),
                                   ),
                                   Align(
                                     alignment: Alignment.centerRight,
@@ -2084,79 +2132,18 @@ class _SettingsPageState extends State<SettingsPage> {
                       if (appState.tvBackgroundMode !=
                           TvBackgroundMode.none) ...[
                         const Divider(height: 1),
-                        ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          leading: const Icon(Icons.opacity_outlined),
-                          title: const Text('背景透明度'),
-                          subtitle: Builder(
-                            builder: (context) {
-                              final value = (_tvBackgroundOpacityDraft ??
-                                      appState.tvBackgroundOpacity)
-                                  .clamp(0.0, 1.0)
-                                  .toDouble();
-                              final pct = (value * 100).round();
-                              return Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: Text(
-                                          '当前：$pct%（0-100%）',
-                                        ),
-                                      ),
-                                      TextButton(
-                                        onPressed:
-                                            appState.tvBackgroundOpacity == 1.0
-                                                ? null
-                                                : () {
-                                                    setState(() =>
-                                                        _tvBackgroundOpacityDraft =
-                                                            null);
-                                                    // ignore: unawaited_futures
-                                                    appState
-                                                        .setTvBackgroundOpacity(
-                                                            1.0);
-                                                  },
-                                        child: const Text('重置'),
-                                      ),
-                                    ],
-                                  ),
-                                  AppSlider(
-                                    value: value,
-                                    min: 0.0,
-                                    max: 1.0,
-                                    divisions: 20,
-                                    label: '$pct%',
-                                    onChanged: (v) => setState(
-                                        () => _tvBackgroundOpacityDraft = v),
-                                    onChangeEnd: (v) {
-                                      setState(() =>
-                                          _tvBackgroundOpacityDraft = null);
-                                      // ignore: unawaited_futures
-                                      appState.setTvBackgroundOpacity(v);
-                                    },
-                                  ),
-                                ],
-                              );
-                            },
-                          ),
-                        ),
-                        if (appState.tvBackgroundMode ==
-                                TvBackgroundMode.image ||
-                            appState.tvBackgroundMode ==
-                                TvBackgroundMode.randomApi) ...[
-                          const Divider(height: 1),
+                        tvFocusRow(
                           ListTile(
                             contentPadding: EdgeInsets.zero,
-                            leading: const Icon(Icons.blur_on_outlined),
-                            title: const Text('背景模糊度'),
+                            leading: const Icon(Icons.opacity_outlined),
+                            title: const Text('背景透明度'),
                             subtitle: Builder(
                               builder: (context) {
-                                final value = (_tvBackgroundBlurSigmaDraft ??
-                                        appState.tvBackgroundBlurSigma)
-                                    .clamp(0.0, 30.0)
+                                final value = (_tvBackgroundOpacityDraft ??
+                                        appState.tvBackgroundOpacity)
+                                    .clamp(0.0, 1.0)
                                     .toDouble();
+                                final pct = (value * 100).round();
                                 return Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
@@ -2164,22 +2151,22 @@ class _SettingsPageState extends State<SettingsPage> {
                                       children: [
                                         Expanded(
                                           child: Text(
-                                            '当前：${value.toStringAsFixed(0)}（0-30）',
+                                            '当前：$pct%（0-100%）',
                                           ),
                                         ),
                                         TextButton(
                                           onPressed:
-                                              appState.tvBackgroundBlurSigma ==
-                                                      0.0
+                                              appState.tvBackgroundOpacity ==
+                                                      1.0
                                                   ? null
                                                   : () {
                                                       setState(() =>
-                                                          _tvBackgroundBlurSigmaDraft =
+                                                          _tvBackgroundOpacityDraft =
                                                               null);
                                                       // ignore: unawaited_futures
                                                       appState
-                                                          .setTvBackgroundBlurSigma(
-                                                              0.0);
+                                                          .setTvBackgroundOpacity(
+                                                              1.0);
                                                     },
                                           child: const Text('重置'),
                                         ),
@@ -2188,21 +2175,89 @@ class _SettingsPageState extends State<SettingsPage> {
                                     AppSlider(
                                       value: value,
                                       min: 0.0,
-                                      max: 30.0,
-                                      divisions: 30,
-                                      label: value.toStringAsFixed(0),
-                                      onChanged: (v) => setState(() =>
-                                          _tvBackgroundBlurSigmaDraft = v),
+                                      max: 1.0,
+                                      divisions: 20,
+                                      label: '$pct%',
+                                      onChanged: (v) => setState(
+                                          () => _tvBackgroundOpacityDraft = v),
                                       onChangeEnd: (v) {
                                         setState(() =>
-                                            _tvBackgroundBlurSigmaDraft = null);
+                                            _tvBackgroundOpacityDraft = null);
                                         // ignore: unawaited_futures
-                                        appState.setTvBackgroundBlurSigma(v);
+                                        appState.setTvBackgroundOpacity(v);
                                       },
                                     ),
                                   ],
                                 );
                               },
+                            ),
+                          ),
+                        ),
+                        if (appState.tvBackgroundMode ==
+                                TvBackgroundMode.image ||
+                            appState.tvBackgroundMode ==
+                                TvBackgroundMode.randomApi) ...[
+                          const Divider(height: 1),
+                          tvFocusRow(
+                            ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: const Icon(Icons.blur_on_outlined),
+                              title: const Text('背景模糊度'),
+                              subtitle: Builder(
+                                builder: (context) {
+                                  final value = (_tvBackgroundBlurSigmaDraft ??
+                                          appState.tvBackgroundBlurSigma)
+                                      .clamp(0.0, 30.0)
+                                      .toDouble();
+                                  return Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: Text(
+                                              '当前：${value.toStringAsFixed(0)}（0-30）',
+                                            ),
+                                          ),
+                                          TextButton(
+                                            onPressed: appState
+                                                        .tvBackgroundBlurSigma ==
+                                                    0.0
+                                                ? null
+                                                : () {
+                                                    setState(() =>
+                                                        _tvBackgroundBlurSigmaDraft =
+                                                            null);
+                                                    // ignore: unawaited_futures
+                                                    appState
+                                                        .setTvBackgroundBlurSigma(
+                                                            0.0);
+                                                  },
+                                            child: const Text('重置'),
+                                          ),
+                                        ],
+                                      ),
+                                      AppSlider(
+                                        value: value,
+                                        min: 0.0,
+                                        max: 30.0,
+                                        divisions: 30,
+                                        label: value.toStringAsFixed(0),
+                                        onChanged: (v) => setState(() =>
+                                            _tvBackgroundBlurSigmaDraft = v),
+                                        onChangeEnd: (v) {
+                                          setState(() =>
+                                              _tvBackgroundBlurSigmaDraft =
+                                                  null);
+                                          // ignore: unawaited_futures
+                                          appState.setTvBackgroundBlurSigma(v);
+                                        },
+                                      ),
+                                    ],
+                                  );
+                                },
+                              ),
                             ),
                           ),
                         ],
@@ -2479,29 +2534,37 @@ class _SettingsPageState extends State<SettingsPage> {
                       ),
                       const Divider(height: 1),
                     ],
-                    SwitchListTile(
-                      value: appState.showHomeLibraryQuickAccess,
-                      onChanged: (v) =>
-                          appState.setShowHomeLibraryQuickAccess(v),
-                      title: const Text('首页媒体库快捷栏'),
-                      subtitle: const Text('在首页“继续观看”下方显示媒体库快速访问栏'),
-                      contentPadding: EdgeInsets.zero,
+                    tvFocusRow(
+                      SwitchListTile(
+                        value: appState.showHomeLibraryQuickAccess,
+                        onChanged: (v) =>
+                            appState.setShowHomeLibraryQuickAccess(v),
+                        title: const Text('首页媒体库快捷栏'),
+                        subtitle:
+                            const Text('在首页“继续观看”下方显示媒体库快速访问栏'),
+                        contentPadding: EdgeInsets.zero,
+                      ),
                     ),
                     const Divider(height: 1),
-                    SwitchListTile(
-                      value: appState.libraryFilterPanelPinned,
-                      onChanged: (v) => appState.setLibraryFilterPanelPinned(v),
-                      title: const Text('常驻筛选面板'),
-                      subtitle: const Text('在媒体库详情页常驻显示筛选面板'),
-                      contentPadding: EdgeInsets.zero,
+                    tvFocusRow(
+                      SwitchListTile(
+                        value: appState.libraryFilterPanelPinned,
+                        onChanged: (v) =>
+                            appState.setLibraryFilterPanelPinned(v),
+                        title: const Text('常驻筛选面板'),
+                        subtitle: const Text('在媒体库详情页常驻显示筛选面板'),
+                        contentPadding: EdgeInsets.zero,
+                      ),
                     ),
                     const Divider(height: 1),
-                    SwitchListTile(
-                      value: appState.libraryCustomPrefixFiltersEnabled,
-                      onChanged: (v) =>
-                          appState.setLibraryCustomPrefixFiltersEnabled(v),
-                      title: const Text('自定义 Tag/Genre 前缀筛选'),
-                      contentPadding: EdgeInsets.zero,
+                    tvFocusRow(
+                      SwitchListTile(
+                        value: appState.libraryCustomPrefixFiltersEnabled,
+                        onChanged: (v) =>
+                            appState.setLibraryCustomPrefixFiltersEnabled(v),
+                        title: const Text('自定义 Tag/Genre 前缀筛选'),
+                        contentPadding: EdgeInsets.zero,
+                      ),
                     ),
                   ],
                 ),
@@ -2512,218 +2575,234 @@ class _SettingsPageState extends State<SettingsPage> {
                 enableBlur: enableBlur,
                 child: Column(
                   children: [
-                    SwitchListTile(
-                      value: appState.episodePickerShowTitle,
-                      onChanged: (v) => appState.setEpisodePickerShowTitle(v),
-                      title: const Text('选集列表显示标题'),
-                      subtitle: Text(
-                        appState.episodePickerShowTitle
-                            ? '条形显示标题和封面'
-                            : '网格状仅显示集数',
-                      ),
-                      secondary: const Icon(Icons.format_list_numbered),
-                      contentPadding: EdgeInsets.zero,
-                    ),
-                    const Divider(height: 1),
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.task_alt_outlined),
-                      title: const Text('标记阈值'),
-                      subtitle: Builder(
-                        builder: (context) {
-                          const defaultValue = 90;
-                          final value = (_markPlayedThresholdDraftPct ??
-                                  appState.markPlayedThresholdPercent
-                                      .toDouble())
-                              .round()
-                              .clamp(75, 100);
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text('观看进度达到该比例时自动标记为已播放'),
-                              const SizedBox(height: 6),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: Text('当前：$value%（75-100%）'),
-                                  ),
-                                  TextButton(
-                                    onPressed: value == defaultValue &&
-                                            _markPlayedThresholdDraftPct == null
-                                        ? null
-                                        : () {
-                                            setState(() =>
-                                                _markPlayedThresholdDraftPct =
-                                                    null);
-                                            // ignore: unawaited_futures
-                                            appState
-                                                .setMarkPlayedThresholdPercent(
-                                                    defaultValue);
-                                          },
-                                    child: const Text('重置'),
-                                  ),
-                                ],
-                              ),
-                              AppSlider(
-                                value: value.toDouble(),
-                                min: 75,
-                                max: 100,
-                                divisions: 25,
-                                label: '$value%',
-                                onChanged: (v) => setState(
-                                  () => _markPlayedThresholdDraftPct = v,
-                                ),
-                                onChangeEnd: (v) {
-                                  final next = v.round().clamp(75, 100);
-                                  setState(() =>
-                                      _markPlayedThresholdDraftPct = null);
-                                  // ignore: unawaited_futures
-                                  appState.setMarkPlayedThresholdPercent(next);
-                                },
-                              ),
-                            ],
-                          );
-                        },
+                    tvFocusRow(
+                      SwitchListTile(
+                        value: appState.episodePickerShowTitle,
+                        onChanged: (v) => appState.setEpisodePickerShowTitle(v),
+                        title: const Text('选集列表显示标题'),
+                        subtitle: Text(
+                          appState.episodePickerShowTitle
+                              ? '条形显示标题和封面'
+                              : '网格状仅显示集数',
+                        ),
+                        secondary: const Icon(Icons.format_list_numbered),
+                        contentPadding: EdgeInsets.zero,
                       ),
                     ),
                     const Divider(height: 1),
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.storage_outlined),
-                      title: const Text('播放缓冲大小'),
-                      subtitle: Builder(
-                        builder: (context) {
-                          final cacheMb = (_mpvCacheDraftMb ??
-                                  appState.mpvCacheSizeMb.toDouble())
-                              .round()
-                              .clamp(200, 2048);
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('当前：${cacheMb}MB（200-2048MB，默认500MB）'),
-                              AppSlider(
-                                value: cacheMb.toDouble(),
-                                min: 200,
-                                max: 2048,
-                                divisions: 2048 - 200,
-                                label: '${cacheMb}MB',
-                                onChanged: (v) =>
-                                    setState(() => _mpvCacheDraftMb = v),
-                                onChangeEnd: (v) {
-                                  final mb = v.round().clamp(200, 2048);
-                                  setState(() => _mpvCacheDraftMb = null);
-                                  // ignore: unawaited_futures
-                                  appState.setMpvCacheSizeMb(mb);
-                                },
-                              ),
-                            ],
-                          );
-                        },
-                      ),
-                    ),
-                    const Divider(height: 1),
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.tune_outlined),
-                      title: const Text('缓冲策略'),
-                      subtitle: Builder(
-                        builder: (context) {
-                          final totalMb = (_mpvCacheDraftMb ??
-                                  appState.mpvCacheSizeMb.toDouble())
-                              .round()
-                              .clamp(200, 2048);
-                          final ratio = (_bufferBackRatioDraft ??
-                                  appState.playbackBufferBackRatio)
-                              .clamp(0.0, 0.30)
-                              .toDouble();
-                          final split = PlaybackBufferSplit.from(
-                            totalMb: totalMb,
-                            backRatio: ratio,
-                          );
-                          final backPct = (split.backRatio * 100).round();
-                          final forwardPct = 100 - backPct;
-
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '回退：${split.backMb}MB（$backPct%）  前向：${split.forwardMb}MB（$forwardPct%）',
-                              ),
-                              const SizedBox(height: 8),
-                              SegmentedButton<PlaybackBufferPreset>(
-                                segments: PlaybackBufferPreset.values
-                                    .map(
-                                      (p) => ButtonSegment(
-                                        value: p,
-                                        label: Text(p.label),
-                                      ),
-                                    )
-                                    .toList(growable: false),
-                                selected: {appState.playbackBufferPreset},
-                                onSelectionChanged: (s) async {
-                                  setState(() => _bufferBackRatioDraft = null);
-                                  await appState.setPlaybackBufferPreset(
-                                    s.first,
-                                  );
-                                },
-                              ),
-                              const SizedBox(height: 8),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      '回退比例：$backPct%（0-30%）',
+                    tvFocusRow(
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.task_alt_outlined),
+                        title: const Text('标记阈值'),
+                        subtitle: Builder(
+                          builder: (context) {
+                            const defaultValue = 90;
+                            final value = (_markPlayedThresholdDraftPct ??
+                                    appState.markPlayedThresholdPercent
+                                        .toDouble())
+                                .round()
+                                .clamp(75, 100);
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('观看进度达到该比例时自动标记为已播放'),
+                                const SizedBox(height: 6),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text('当前：$value%（75-100%）'),
                                     ),
-                                  ),
-                                  TextButton(
-                                    onPressed: appState.playbackBufferPreset ==
-                                                PlaybackBufferPreset.seekFast &&
-                                            (appState.playbackBufferBackRatio -
-                                                        0.05)
-                                                    .abs() <
-                                                0.00001 &&
-                                            _bufferBackRatioDraft == null
-                                        ? null
-                                        : () {
-                                            // ignore: unawaited_futures
-                                            appState.setPlaybackBufferPreset(
-                                              PlaybackBufferPreset.seekFast,
-                                            );
-                                            setState(() =>
-                                                _bufferBackRatioDraft = null);
-                                          },
-                                    child: const Text('重置'),
-                                  ),
-                                ],
-                              ),
-                              AppSlider(
-                                value: split.backRatio,
-                                min: 0.0,
-                                max: 0.30,
-                                divisions: 30,
-                                label: '$backPct%',
-                                onChanged: (v) => setState(
-                                  () => _bufferBackRatioDraft = v,
+                                    TextButton(
+                                      onPressed: value == defaultValue &&
+                                              _markPlayedThresholdDraftPct ==
+                                                  null
+                                          ? null
+                                          : () {
+                                              setState(() =>
+                                                  _markPlayedThresholdDraftPct =
+                                                      null);
+                                              // ignore: unawaited_futures
+                                              appState
+                                                  .setMarkPlayedThresholdPercent(
+                                                      defaultValue);
+                                            },
+                                      child: const Text('重置'),
+                                    ),
+                                  ],
                                 ),
-                                onChangeEnd: (v) {
-                                  setState(() => _bufferBackRatioDraft = null);
-                                  // ignore: unawaited_futures
-                                  appState.setPlaybackBufferBackRatio(v);
-                                },
-                              ),
-                            ],
-                          );
-                        },
+                                AppSlider(
+                                  value: value.toDouble(),
+                                  min: 75,
+                                  max: 100,
+                                  divisions: 25,
+                                  label: '$value%',
+                                  onChanged: (v) => setState(
+                                    () => _markPlayedThresholdDraftPct = v,
+                                  ),
+                                  onChangeEnd: (v) {
+                                    final next = v.round().clamp(75, 100);
+                                    setState(() =>
+                                        _markPlayedThresholdDraftPct = null);
+                                    // ignore: unawaited_futures
+                                    appState.setMarkPlayedThresholdPercent(next);
+                                  },
+                                ),
+                              ],
+                            );
+                          },
+                        ),
                       ),
                     ),
                     const Divider(height: 1),
-                    SwitchListTile(
-                      value: appState.flushBufferOnSeek,
-                      onChanged: (v) => appState.setFlushBufferOnSeek(v),
-                      contentPadding: EdgeInsets.zero,
-                      secondary: const Icon(Icons.flash_on_outlined),
-                      title: const Text('跳转时清空旧缓冲（推荐）'),
-                      subtitle: const Text('快进/快退/拖动进度后优先缓冲新位置，起播更快'),
+                    tvFocusRow(
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.storage_outlined),
+                        title: const Text('播放缓冲大小'),
+                        subtitle: Builder(
+                          builder: (context) {
+                            final cacheMb = (_mpvCacheDraftMb ??
+                                    appState.mpvCacheSizeMb.toDouble())
+                                .round()
+                                .clamp(200, 2048);
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('当前：${cacheMb}MB（200-2048MB，默认500MB）'),
+                                AppSlider(
+                                  value: cacheMb.toDouble(),
+                                  min: 200,
+                                  max: 2048,
+                                  divisions: 2048 - 200,
+                                  label: '${cacheMb}MB',
+                                  onChanged: (v) =>
+                                      setState(() => _mpvCacheDraftMb = v),
+                                  onChangeEnd: (v) {
+                                    final mb = v.round().clamp(200, 2048);
+                                    setState(() => _mpvCacheDraftMb = null);
+                                    // ignore: unawaited_futures
+                                    appState.setMpvCacheSizeMb(mb);
+                                  },
+                                ),
+                              ],
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                    const Divider(height: 1),
+                    tvFocusRow(
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.tune_outlined),
+                        title: const Text('缓冲策略'),
+                        subtitle: Builder(
+                          builder: (context) {
+                            final totalMb = (_mpvCacheDraftMb ??
+                                    appState.mpvCacheSizeMb.toDouble())
+                                .round()
+                                .clamp(200, 2048);
+                            final ratio = (_bufferBackRatioDraft ??
+                                    appState.playbackBufferBackRatio)
+                                .clamp(0.0, 0.30)
+                                .toDouble();
+                            final split = PlaybackBufferSplit.from(
+                              totalMb: totalMb,
+                              backRatio: ratio,
+                            );
+                            final backPct = (split.backRatio * 100).round();
+                            final forwardPct = 100 - backPct;
+
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '回退：${split.backMb}MB（$backPct%）  前向：${split.forwardMb}MB（$forwardPct%）',
+                                ),
+                                const SizedBox(height: 8),
+                                SegmentedButton<PlaybackBufferPreset>(
+                                  segments: PlaybackBufferPreset.values
+                                      .map(
+                                        (p) => ButtonSegment(
+                                          value: p,
+                                          label: Text(p.label),
+                                        ),
+                                      )
+                                      .toList(growable: false),
+                                  selected: {appState.playbackBufferPreset},
+                                  onSelectionChanged: (s) async {
+                                    setState(() =>
+                                        _bufferBackRatioDraft = null);
+                                    await appState.setPlaybackBufferPreset(
+                                      s.first,
+                                    );
+                                  },
+                                ),
+                                const SizedBox(height: 8),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        '回退比例：$backPct%（0-30%）',
+                                      ),
+                                    ),
+                                    TextButton(
+                                      onPressed: appState
+                                                      .playbackBufferPreset ==
+                                                  PlaybackBufferPreset
+                                                      .seekFast &&
+                                              (appState
+                                                              .playbackBufferBackRatio -
+                                                          0.05)
+                                                      .abs() <
+                                                  0.00001 &&
+                                              _bufferBackRatioDraft == null
+                                          ? null
+                                          : () {
+                                              // ignore: unawaited_futures
+                                              appState.setPlaybackBufferPreset(
+                                                PlaybackBufferPreset.seekFast,
+                                              );
+                                              setState(() =>
+                                                  _bufferBackRatioDraft = null);
+                                            },
+                                      child: const Text('重置'),
+                                    ),
+                                  ],
+                                ),
+                                AppSlider(
+                                  value: split.backRatio,
+                                  min: 0.0,
+                                  max: 0.30,
+                                  divisions: 30,
+                                  label: '$backPct%',
+                                  onChanged: (v) => setState(
+                                    () => _bufferBackRatioDraft = v,
+                                  ),
+                                  onChangeEnd: (v) {
+                                    setState(() => _bufferBackRatioDraft = null);
+                                    // ignore: unawaited_futures
+                                    appState.setPlaybackBufferBackRatio(v);
+                                  },
+                                ),
+                              ],
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                    const Divider(height: 1),
+                    tvFocusRow(
+                      SwitchListTile(
+                        value: appState.flushBufferOnSeek,
+                        onChanged: (v) => appState.setFlushBufferOnSeek(v),
+                        contentPadding: EdgeInsets.zero,
+                        secondary: const Icon(Icons.flash_on_outlined),
+                        title: const Text('跳转时清空旧缓冲（推荐）'),
+                        subtitle:
+                            const Text('快进/快退/拖动进度后优先缓冲新位置，起播更快'),
+                      ),
                     ),
                     const Divider(height: 1),
                     if (isDesktop) ...[
@@ -2775,168 +2854,188 @@ class _SettingsPageState extends State<SettingsPage> {
                       ],
                       const Divider(height: 1),
                     ],
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.audiotrack),
-                      title: const Text('优先音轨'),
-                      trailing: ConstrainedBox(
-                        constraints: BoxConstraints(maxWidth: trailingMaxWidth),
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButton<String>(
-                            value: appState.preferredAudioLang,
-                            items: _audioLangItems(appState.preferredAudioLang),
-                            onChanged: (v) async {
-                              if (v == null) return;
-                              if (v == _customSentinel) {
-                                final code = await _askCustomLang(
-                                  context,
-                                  title: '自定义音轨语言',
-                                  initial: appState.preferredAudioLang,
-                                );
-                                if (code == null) return;
-                                await appState.setPreferredAudioLang(code);
-                                return;
-                              }
-                              await appState.setPreferredAudioLang(v);
-                            },
-                          ),
-                        ),
-                      ),
-                    ),
-                    const Divider(height: 1),
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.subtitles_outlined),
-                      title: const Text('优先字幕'),
-                      trailing: ConstrainedBox(
-                        constraints: BoxConstraints(maxWidth: trailingMaxWidth),
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButton<String>(
-                            value: appState.preferredSubtitleLang,
-                            items: _subtitleLangItems(
-                                appState.preferredSubtitleLang),
-                            onChanged: (v) async {
-                              if (v == null) return;
-                              if (v == _customSentinel) {
-                                final code = await _askCustomLang(
-                                  context,
-                                  title: '自定义字幕语言',
-                                  initial: appState.preferredSubtitleLang,
-                                );
-                                if (code == null) return;
-                                await appState.setPreferredSubtitleLang(code);
-                                return;
-                              }
-                              await appState.setPreferredSubtitleLang(v);
-                            },
-                          ),
-                        ),
-                      ),
-                    ),
-                    const Divider(height: 1),
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.touch_app_outlined),
-                      title: const Text('交互设置'),
-                      subtitle: const Text('手势、双击、快进快退等'),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => InteractionSettingsPage(
-                              appState: widget.appState,
+                    tvFocusRow(
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.audiotrack),
+                        title: const Text('优先音轨'),
+                        trailing: ConstrainedBox(
+                          constraints:
+                              BoxConstraints(maxWidth: trailingMaxWidth),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              value: appState.preferredAudioLang,
+                              items:
+                                  _audioLangItems(appState.preferredAudioLang),
+                              onChanged: (v) async {
+                                if (v == null) return;
+                                if (v == _customSentinel) {
+                                  final code = await _askCustomLang(
+                                    context,
+                                    title: '自定义音轨语言',
+                                    initial: appState.preferredAudioLang,
+                                  );
+                                  if (code == null) return;
+                                  await appState.setPreferredAudioLang(code);
+                                  return;
+                                }
+                                await appState.setPreferredAudioLang(v);
+                              },
                             ),
                           ),
-                        );
-                      },
+                        ),
+                      ),
+                    ),
+                    const Divider(height: 1),
+                    tvFocusRow(
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.subtitles_outlined),
+                        title: const Text('优先字幕'),
+                        trailing: ConstrainedBox(
+                          constraints:
+                              BoxConstraints(maxWidth: trailingMaxWidth),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              value: appState.preferredSubtitleLang,
+                              items: _subtitleLangItems(
+                                  appState.preferredSubtitleLang),
+                              onChanged: (v) async {
+                                if (v == null) return;
+                                if (v == _customSentinel) {
+                                  final code = await _askCustomLang(
+                                    context,
+                                    title: '自定义字幕语言',
+                                    initial: appState.preferredSubtitleLang,
+                                  );
+                                  if (code == null) return;
+                                  await appState.setPreferredSubtitleLang(code);
+                                  return;
+                                }
+                                await appState.setPreferredSubtitleLang(v);
+                              },
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const Divider(height: 1),
+                    tvFocusRow(
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.touch_app_outlined),
+                        title: const Text('交互设置'),
+                        subtitle: const Text('手势、双击、快进快退等'),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => InteractionSettingsPage(
+                                appState: widget.appState,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
                     ),
                     const Divider(height: 1),
                     if (isTv) ...[
-                      SwitchListTile(
-                        value: appState.danmakuEnabled,
-                        onChanged: (v) => appState.setDanmakuEnabled(v),
-                        secondary: const Icon(Icons.comment_outlined),
-                        title: const Text('弹幕'),
-                        subtitle: Text(
-                          !appState.danmakuEnabled
-                              ? '已关闭'
-                              : (appState.danmakuLoadMode ==
-                                      DanmakuLoadMode.online
-                                  ? '在线：${appState.danmakuApiUrls.isEmpty ? '未配置弹幕源' : appState.danmakuApiUrls.first}'
-                                  : '本地弹幕'),
+                      tvFocusRow(
+                        SwitchListTile(
+                          value: appState.danmakuEnabled,
+                          onChanged: (v) => appState.setDanmakuEnabled(v),
+                          secondary: const Icon(Icons.comment_outlined),
+                          title: const Text('弹幕'),
+                          subtitle: Text(
+                            !appState.danmakuEnabled
+                                ? '已关闭'
+                                : (appState.danmakuLoadMode ==
+                                        DanmakuLoadMode.online
+                                    ? '在线：${appState.danmakuApiUrls.isEmpty ? '未配置弹幕源' : appState.danmakuApiUrls.first}'
+                                    : '本地弹幕'),
+                          ),
+                          contentPadding: EdgeInsets.zero,
                         ),
-                        contentPadding: EdgeInsets.zero,
                       ),
                       const Divider(height: 1),
-                      ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: const Icon(Icons.tune_outlined),
-                        title: const Text('弹幕设置'),
-                        subtitle: const Text('弹幕源 / 样式 / 匹配'),
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => DanmakuSettingsPage(
-                                  appState: widget.appState),
-                            ),
-                          );
-                        },
+                      tvFocusRow(
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: const Icon(Icons.tune_outlined),
+                          title: const Text('弹幕设置'),
+                          subtitle: const Text('弹幕源 / 样式 / 匹配'),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => DanmakuSettingsPage(
+                                    appState: widget.appState),
+                              ),
+                            );
+                          },
+                        ),
                       ),
                       const Divider(height: 1),
-                      SwitchListTile(
-                        value: appState.autoSkipIntro,
-                        onChanged: (v) => appState.setAutoSkipIntro(v),
-                        secondary: const Icon(Icons.skip_next_outlined),
-                        title: const Text('自动跳过片头'),
-                        subtitle: const Text(
-                          '服务器支持片头数据时，在片头段会提示是否跳过。',
+                      tvFocusRow(
+                        SwitchListTile(
+                          value: appState.autoSkipIntro,
+                          onChanged: (v) => appState.setAutoSkipIntro(v),
+                          secondary: const Icon(Icons.skip_next_outlined),
+                          title: const Text('自动跳过片头'),
+                          subtitle: const Text(
+                            '服务器支持片头数据时，在片头段会提示是否跳过。',
+                          ),
+                          contentPadding: EdgeInsets.zero,
                         ),
-                        contentPadding: EdgeInsets.zero,
                       ),
                     ] else ...[
-                      ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: const Icon(Icons.comment_outlined),
-                        title: const Text('弹幕'),
-                        subtitle: Text(
-                          appState.danmakuLoadMode == DanmakuLoadMode.online
-                              ? '在线：${appState.danmakuApiUrls.isEmpty ? '未配置弹幕源' : appState.danmakuApiUrls.first}'
-                              : '本地弹幕',
+                      tvFocusRow(
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: const Icon(Icons.comment_outlined),
+                          title: const Text('弹幕'),
+                          subtitle: Text(
+                            appState.danmakuLoadMode == DanmakuLoadMode.online
+                                ? '在线：${appState.danmakuApiUrls.isEmpty ? '未配置弹幕源' : appState.danmakuApiUrls.first}'
+                                : '本地弹幕',
+                          ),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => DanmakuSettingsPage(
+                                    appState: widget.appState),
+                              ),
+                            );
+                          },
                         ),
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => DanmakuSettingsPage(
-                                  appState: widget.appState),
-                            ),
-                          );
-                        },
                       ),
                     ],
                     const Divider(height: 1),
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.video_file_outlined),
-                      title: const Text('优先视频版本'),
-                      trailing: ConstrainedBox(
-                        constraints: BoxConstraints(maxWidth: trailingMaxWidth),
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButton<VideoVersionPreference>(
-                            value: appState.preferredVideoVersion,
-                            items: VideoVersionPreference.values
-                                .map(
-                                  (p) => DropdownMenuItem(
-                                    value: p,
-                                    child: Text(p.label),
-                                  ),
-                                )
-                                .toList(),
-                            onChanged: (v) {
-                              if (v == null) return;
-                              appState.setPreferredVideoVersion(v);
-                            },
+                    tvFocusRow(
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.video_file_outlined),
+                        title: const Text('优先视频版本'),
+                        trailing: ConstrainedBox(
+                          constraints:
+                              BoxConstraints(maxWidth: trailingMaxWidth),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<VideoVersionPreference>(
+                              value: appState.preferredVideoVersion,
+                              items: VideoVersionPreference.values
+                                  .map(
+                                    (p) => DropdownMenuItem(
+                                      value: p,
+                                      child: Text(p.label),
+                                    ),
+                                  )
+                                  .toList(),
+                              onChanged: (v) {
+                                if (v == null) return;
+                                appState.setPreferredVideoVersion(v);
+                              },
+                            ),
                           ),
                         ),
                       ),
@@ -2951,40 +3050,49 @@ class _SettingsPageState extends State<SettingsPage> {
                 enableBlur: enableBlur,
                 child: Column(
                   children: [
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.upload_file_outlined),
-                      title: const Text('导出备份（免密码）'),
-                      subtitle: const Text('不加密：导出全部设置与服务器 token'),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () => _exportPlainBackup(context),
+                    tvFocusRow(
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.upload_file_outlined),
+                        title: const Text('导出备份（免密码）'),
+                        subtitle: const Text('不加密：导出全部设置与服务器 token'),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => _exportPlainBackup(context),
+                      ),
                     ),
                     const Divider(height: 1),
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.lock_outline),
-                      title: const Text('导出加密备份（推荐）'),
-                      subtitle: const Text('需要备份密码：可选导出账号密码/会话 token'),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () => _exportEncryptedBackup(context),
+                    tvFocusRow(
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.lock_outline),
+                        title: const Text('导出加密备份（推荐）'),
+                        subtitle: const Text('需要备份密码：可选导出账号密码/会话 token'),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => _exportEncryptedBackup(context),
+                      ),
                     ),
                     const Divider(height: 1),
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.download_for_offline_outlined),
-                      title: const Text('导入备份'),
-                      subtitle: const Text('覆盖本机全部设置与 Emby 服务器列表'),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () => _importBackup(context),
+                    tvFocusRow(
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading:
+                            const Icon(Icons.download_for_offline_outlined),
+                        title: const Text('导入备份'),
+                        subtitle: const Text('覆盖本机全部设置与 Emby 服务器列表'),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => _importBackup(context),
+                      ),
                     ),
                     const Divider(height: 1),
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.content_paste_outlined),
-                      title: const Text('从文本提取并导入服务器'),
-                      subtitle: const Text('解析“线路 & 用户密码”消息，批量创建服务器/线路'),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () => _openServerTextImport(context),
+                    tvFocusRow(
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.content_paste_outlined),
+                        title: const Text('从文本提取并导入服务器'),
+                        subtitle: const Text('解析“线路 & 用户密码”消息，批量创建服务器/线路'),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => _openServerTextImport(context),
+                      ),
                     ),
                   ],
                 ),
@@ -3030,181 +3138,202 @@ class _SettingsPageState extends State<SettingsPage> {
                       ),
                       const Divider(height: 1),
                     ],
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.delete_outline),
-                      title: const Text('清理视频流缓存'),
-                      subtitle: const Text('删除本地缓存的视频流数据'),
-                      onTap: () async {
-                        final confirmed = await showDialog<bool>(
-                          context: context,
-                          builder: (dctx) => AlertDialog(
-                            title: const Text('清理视频流缓存'),
-                            content: const Text(
-                              '将删除已缓存的视频流数据，下次播放时会重新缓存。',
-                            ),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.of(dctx).pop(false),
-                                child: const Text('取消'),
+                    tvFocusRow(
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.delete_outline),
+                        title: const Text('清理视频流缓存'),
+                        subtitle: const Text('删除本地缓存的视频流数据'),
+                        onTap: () async {
+                          final confirmed = await showDialog<bool>(
+                            context: context,
+                            builder: (dctx) => AlertDialog(
+                              title: const Text('清理视频流缓存'),
+                              content: const Text(
+                                '将删除已缓存的视频流数据，下次播放时会重新缓存。',
                               ),
-                              FilledButton(
-                                onPressed: () => Navigator.of(dctx).pop(true),
-                                child: const Text('清理'),
-                              ),
-                            ],
-                          ),
-                        );
-                        if (confirmed != true) return;
-                        try {
-                          await StreamCache.clear();
-                          if (!context.mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('已清理视频流缓存')),
-                          );
-                        } catch (e) {
-                          if (!context.mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('清理失败：$e')),
-                          );
-                        }
-                      },
-                    ),
-                    const Divider(height: 1),
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.delete_outline),
-                      title: const Text('清理封面缓存'),
-                      subtitle: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Text('删除本地缓存的封面/随机推荐图片'),
-                          const SizedBox(height: 2),
-                          Text(
-                            '已缓存${_formatMb(_coverCacheSizeBytes)}',
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onSurfaceVariant,
+                              actions: [
+                                TextButton(
+                                  onPressed: () =>
+                                      Navigator.of(dctx).pop(false),
+                                  child: const Text('取消'),
                                 ),
-                          ),
-                        ],
+                                FilledButton(
+                                  onPressed: () =>
+                                      Navigator.of(dctx).pop(true),
+                                  child: const Text('清理'),
+                                ),
+                              ],
+                            ),
+                          );
+                          if (confirmed != true) return;
+                          try {
+                            await StreamCache.clear();
+                            if (!context.mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('已清理视频流缓存')),
+                            );
+                          } catch (e) {
+                            if (!context.mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('清理失败：$e')),
+                            );
+                          }
+                        },
                       ),
-                      onTap: () async {
-                        final confirmed = await showDialog<bool>(
-                          context: context,
-                          builder: (dctx) => AlertDialog(
-                            title: const Text('清理封面缓存'),
-                            content: const Text(
-                              '将删除已缓存的封面/随机推荐图片，下次展示时会重新下载。',
+                    ),
+                    const Divider(height: 1),
+                    tvFocusRow(
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.delete_outline),
+                        title: const Text('清理封面缓存'),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text('删除本地缓存的封面/随机推荐图片'),
+                            const SizedBox(height: 2),
+                            Text(
+                              '已缓存${_formatMb(_coverCacheSizeBytes)}',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant,
+                                  ),
                             ),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.of(dctx).pop(false),
-                                child: const Text('取消'),
+                          ],
+                        ),
+                        onTap: () async {
+                          final confirmed = await showDialog<bool>(
+                            context: context,
+                            builder: (dctx) => AlertDialog(
+                              title: const Text('清理封面缓存'),
+                              content: const Text(
+                                '将删除已缓存的封面/随机推荐图片，下次展示时会重新下载。',
                               ),
-                              FilledButton(
-                                onPressed: () => Navigator.of(dctx).pop(
-                                  true,
+                              actions: [
+                                TextButton(
+                                  onPressed: () =>
+                                      Navigator.of(dctx).pop(false),
+                                  child: const Text('取消'),
                                 ),
-                                child: const Text('清理'),
+                                FilledButton(
+                                  onPressed: () => Navigator.of(dctx).pop(
+                                    true,
+                                  ),
+                                  child: const Text('清理'),
+                                ),
+                              ],
+                            ),
+                          );
+                          if (confirmed != true) return;
+                          try {
+                            await CoverCacheManager.instance.emptyCache();
+                            PaintingBinding.instance.imageCache.clear();
+                            PaintingBinding.instance.imageCache.clearLiveImages();
+                            unawaited(_refreshCoverCacheSize());
+                            if (!context.mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('已清理封面缓存')),
+                            );
+                          } catch (e) {
+                            if (!context.mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('清理失败：$e')),
+                            );
+                          }
+                        },
+                      ),
+                    ),
+                    const Divider(height: 1),
+                    tvFocusRow(
+                      SwitchListTile(
+                        value: appState.autoUpdateEnabled,
+                        onChanged: (v) async {
+                          await appState.setAutoUpdateEnabled(v);
+                          if (v && context.mounted) {
+                            unawaited(
+                              AppUpdateFlow.maybeAutoCheck(
+                                context,
+                                appState: appState,
+                                force: true,
                               ),
-                            ],
-                          ),
-                        );
-                        if (confirmed != true) return;
-                        try {
-                          await CoverCacheManager.instance.emptyCache();
-                          PaintingBinding.instance.imageCache.clear();
-                          PaintingBinding.instance.imageCache.clearLiveImages();
-                          unawaited(_refreshCoverCacheSize());
-                          if (!context.mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('已清理封面缓存')),
-                          );
-                        } catch (e) {
-                          if (!context.mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('清理失败：$e')),
-                          );
-                        }
-                      },
+                            );
+                          }
+                        },
+                        secondary: const Icon(Icons.system_update),
+                        title: const Text('自动更新'),
+                        subtitle:
+                            const Text('启动时自动检查新版本，并在发现更新时提示安装'),
+                        contentPadding: EdgeInsets.zero,
+                      ),
                     ),
                     const Divider(height: 1),
-                    SwitchListTile(
-                      value: appState.autoUpdateEnabled,
-                      onChanged: (v) async {
-                        await appState.setAutoUpdateEnabled(v);
-                        if (v && context.mounted) {
-                          unawaited(
-                            AppUpdateFlow.maybeAutoCheck(
-                              context,
-                              appState: appState,
-                              force: true,
-                            ),
-                          );
-                        }
-                      },
-                      secondary: const Icon(Icons.system_update),
-                      title: const Text('自动更新'),
-                      subtitle: const Text('启动时自动检查新版本，并在发现更新时提示安装'),
-                      contentPadding: EdgeInsets.zero,
+                    tvFocusRow(
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.system_update_alt_outlined),
+                        title: const Text('检查更新'),
+                        subtitle: _currentVersionFull.trim().isEmpty
+                            ? null
+                            : Text('当前版本：${_currentVersionFull.trim()}'),
+                        trailing: _checkingUpdate
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.chevron_right),
+                        onTap: _checkingUpdate
+                            ? null
+                            : () => _checkUpdates(context),
+                      ),
                     ),
                     const Divider(height: 1),
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.system_update_alt_outlined),
-                      title: const Text('检查更新'),
-                      subtitle: _currentVersionFull.trim().isEmpty
-                          ? null
-                          : Text('当前版本：${_currentVersionFull.trim()}'),
-                      trailing: _checkingUpdate
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.chevron_right),
-                      onTap:
-                          _checkingUpdate ? null : () => _checkUpdates(context),
+                    tvFocusRow(
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.info_outline),
+                        title: const Text('关于'),
+                        subtitle: Text(
+                            '${appConfig.displayName} (${appConfig.repoUrl})'),
+                        trailing: const Icon(Icons.open_in_new),
+                        onTap: () async {
+                          final ok = await launchUrlString(appConfig.repoUrl);
+                          if (!ok && context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('无法打开链接，请检查系统浏览器/网络设置'),
+                              ),
+                            );
+                          }
+                        },
+                      ),
                     ),
                     const Divider(height: 1),
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.info_outline),
-                      title: const Text('关于'),
-                      subtitle: Text(
-                          '${appConfig.displayName} (${appConfig.repoUrl})'),
-                      trailing: const Icon(Icons.open_in_new),
-                      onTap: () async {
-                        final ok = await launchUrlString(appConfig.repoUrl);
-                        if (!ok && context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('无法打开链接，请检查系统浏览器/网络设置'),
-                            ),
-                          );
-                        }
-                      },
-                    ),
-                    const Divider(height: 1),
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.volunteer_activism_outlined),
-                      title: const Text('捐赠'),
-                      subtitle: const Text('支持作者继续开发（爱发电）'),
-                      trailing: const Icon(Icons.open_in_new),
-                      onTap: () async {
-                        final ok = await launchUrlString(_donateUrl);
-                        if (!ok && context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('无法打开链接，请检查系统浏览器/网络设置'),
-                            ),
-                          );
-                        }
-                      },
+                    tvFocusRow(
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.volunteer_activism_outlined),
+                        title: const Text('捐赠'),
+                        subtitle: const Text('支持作者继续开发（爱发电）'),
+                        trailing: const Icon(Icons.open_in_new),
+                        onTap: () async {
+                          final ok = await launchUrlString(_donateUrl);
+                          if (!ok && context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('无法打开链接，请检查系统浏览器/网络设置'),
+                              ),
+                            );
+                          }
+                        },
+                      ),
                     ),
                   ],
                 ),

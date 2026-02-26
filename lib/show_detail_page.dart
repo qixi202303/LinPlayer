@@ -6811,10 +6811,30 @@ class _EpisodeDetailPageState extends State<EpisodeDetailPage> {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final textTheme = theme.textTheme;
+    final isDark = scheme.brightness == Brightness.dark;
+    final uiScale = context.uiScale;
     final season = _selectedSeason;
     final seasonText = _selectedSeasonLabel();
     final epAccess =
         resolveServerAccess(appState: widget.appState, server: widget.server);
+
+    Widget tvFocus(Widget child, {BorderRadius? borderRadius}) {
+      if (!widget.isTv) return child;
+      final radius = borderRadius ??
+          BorderRadius.circular((18 * uiScale).clamp(14.0, 22.0));
+      return TvFocusFrame(
+        borderRadius: radius,
+        surfaceColor: Colors.transparent,
+        focusedSurfaceColor:
+            scheme.primary.withValues(alpha: isDark ? 0.22 : 0.16),
+        borderColor: Colors.transparent,
+        focusedBorderColor: scheme.primary,
+        padding: EdgeInsets.zero,
+        focusScale: 1.04,
+        child: child,
+      );
+    }
+
     final controlStyle = FilledButton.styleFrom(
       foregroundColor: Colors.white,
       backgroundColor: Colors.black.withValues(alpha: 0.28),
@@ -6827,23 +6847,31 @@ class _EpisodeDetailPageState extends State<EpisodeDetailPage> {
       spacing: 8,
       runSpacing: 8,
       children: [
-        FilledButton.tonalIcon(
-          style: controlStyle,
-          onPressed: season == null ? null : () => _openSeasonEpisodesPage(context, season),
-          icon: const Icon(Icons.grid_view_rounded, size: 16),
-          label: const Text('查看全部'),
+        tvFocus(
+          FilledButton.tonalIcon(
+            style: controlStyle,
+            onPressed: season == null
+                ? null
+                : () => _openSeasonEpisodesPage(context, season),
+            icon: const Icon(Icons.grid_view_rounded, size: 16),
+            label: const Text('查看全部'),
+          ),
         ),
-        FilledButton.tonalIcon(
-          style: controlStyle,
-          onPressed: _seasons.isEmpty ? null : () => _pickSeason(context),
-          icon: const Icon(Icons.layers_outlined, size: 16),
-          label: const Text('切换季'),
+        tvFocus(
+          FilledButton.tonalIcon(
+            style: controlStyle,
+            onPressed: _seasons.isEmpty ? null : () => _pickSeason(context),
+            icon: const Icon(Icons.layers_outlined, size: 16),
+            label: const Text('切换季'),
+          ),
         ),
-        FilledButton.tonalIcon(
-          style: controlStyle,
-          onPressed: season == null ? null : () => _pickEpisode(context),
-          icon: const Icon(Icons.format_list_numbered, size: 16),
-          label: const Text('选集'),
+        tvFocus(
+          FilledButton.tonalIcon(
+            style: controlStyle,
+            onPressed: season == null ? null : () => _pickEpisode(context),
+            icon: const Icon(Icons.format_list_numbered, size: 16),
+            label: const Text('选集'),
+          ),
         ),
       ],
     );
@@ -6913,22 +6941,24 @@ class _EpisodeDetailPageState extends State<EpisodeDetailPage> {
                               itemId: e.hasImage ? e.id : season.id,
                               maxWidth: 700,
                             );
-                      return _HoverScale(
+                      final card = _HoverScale(
                         child: SizedBox(
                           width: _DetailUiTokens.horizontalEpisodeCardWidth,
                           child: Material(
                             color: Colors.transparent,
                             child: InkWell(
-                              borderRadius:
-                                  BorderRadius.circular(_DetailUiTokens.cardRadius),
+                              borderRadius: BorderRadius.circular(
+                                _DetailUiTokens.cardRadius,
+                              ),
                               onTap: () {
                                 if (isCurrent) return;
                                 unawaited(_switchEpisode(e));
                               },
                               child: Ink(
                                 decoration: BoxDecoration(
-                                  borderRadius:
-                                      BorderRadius.circular(_DetailUiTokens.cardRadius),
+                                  borderRadius: BorderRadius.circular(
+                                    _DetailUiTokens.cardRadius,
+                                  ),
                                   border: Border.all(
                                     color: isCurrent
                                         ? scheme.primary
@@ -6940,8 +6970,9 @@ class _EpisodeDetailPageState extends State<EpisodeDetailPage> {
                                   fit: StackFit.expand,
                                   children: [
                                     ClipRRect(
-                                      borderRadius:
-                                          BorderRadius.circular(_DetailUiTokens.cardRadius),
+                                      borderRadius: BorderRadius.circular(
+                                        _DetailUiTokens.cardRadius,
+                                      ),
                                       child: img.isEmpty
                                           ? const ColoredBox(color: Colors.black26)
                                           : Image.network(
@@ -6995,6 +7026,12 @@ class _EpisodeDetailPageState extends State<EpisodeDetailPage> {
                               ),
                             ),
                           ),
+                        ),
+                      );
+                      return tvFocus(
+                        card,
+                        borderRadius: BorderRadius.circular(
+                          _DetailUiTokens.cardRadius,
                         ),
                       );
                     },
