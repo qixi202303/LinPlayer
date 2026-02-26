@@ -12,6 +12,7 @@ import 'package:lin_player_ui/lin_player_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 import 'server_adapters/server_access.dart';
+import 'services/playback_proxy/playback_proxy.dart';
 import 'person_page.dart';
 import 'play_network_page.dart';
 import 'play_network_page_exo.dart';
@@ -276,6 +277,47 @@ class _ShowDetailPageState extends State<ShowDetailPage> {
     }
   }
 
+  Future<void> _preloadMovieBestEffort({
+    required ServerAccess access,
+    required String itemId,
+    String? selectedMediaSourceId,
+    int? audioStreamIndex,
+    int? subtitleStreamIndex,
+  }) async {
+    if (!widget.appState.preloadEnabled) return;
+    if (StreamPreloadService.instance.permanentlyDisabled) return;
+
+    final useExoCore = !kIsWeb &&
+        defaultTargetPlatform == TargetPlatform.android &&
+        widget.appState.playerCore == PlayerCore.exo;
+
+    String? httpProxyUrl;
+    final baseUri = Uri.tryParse(access.auth.baseUrl);
+    if (baseUri != null) {
+      httpProxyUrl =
+          resolvePlaybackHttpProxyForUri(appState: widget.appState, uri: baseUri);
+    }
+
+    final result = await StreamPreloadService.instance.preloadFirst3Seconds(
+      adapter: access.adapter,
+      auth: access.auth,
+      itemId: itemId,
+      exoPlayer: useExoCore,
+      selectedMediaSourceId: selectedMediaSourceId,
+      audioStreamIndex: audioStreamIndex,
+      subtitleStreamIndex: subtitleStreamIndex,
+      preferredVideoVersion: widget.appState.preferredVideoVersion,
+      httpProxyUrl: httpProxyUrl,
+    );
+
+    if (!mounted) return;
+    if (result.disabledNow) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('预加载失败，后续将不再尝试')),
+      );
+    }
+  }
+
   Future<void> _load() async {
     setState(() {
       _loading = true;
@@ -306,6 +348,19 @@ class _ShowDetailPageState extends State<ShowDetailPage> {
         itemId: widget.itemId,
       );
       final isSeries = detail.type.toLowerCase() == 'series';
+      final isMovie = detail.type.toLowerCase() == 'movie';
+
+      if (isMovie) {
+        unawaited(
+          _preloadMovieBestEffort(
+            access: access,
+            itemId: widget.itemId,
+            selectedMediaSourceId: _selectedMediaSourceId,
+            audioStreamIndex: _selectedAudioStreamIndex,
+            subtitleStreamIndex: _selectedSubtitleStreamIndex,
+          ),
+        );
+      }
 
       final seasons = isSeries
           ? await access.adapter.fetchSeasons(

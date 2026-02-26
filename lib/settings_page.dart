@@ -2996,7 +2996,7 @@ class _SettingsPageState extends State<SettingsPage> {
                           secondary: const Icon(Icons.download_outlined),
                           title: const Text('预加载'),
                           subtitle: const Text(
-                            '集详情页预加载本集前 3 秒，并预加载下一集前 3 秒。',
+                            '详情页预加载前 3 秒（电影/剧集），续看时从进度处预加载，并在结束前预加载下一集前 3 秒。',
                           ),
                           contentPadding: EdgeInsets.zero,
                         ),
@@ -3138,7 +3138,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         secondary: const Icon(Icons.download_outlined),
                         title: const Text('预加载'),
                         subtitle: const Text(
-                          '集详情页预加载本集前 3 秒，并预加载下一集前 3 秒。',
+                          '详情页预加载前 3 秒（电影/剧集），续看时从进度处预加载，并在结束前预加载下一集前 3 秒。',
                         ),
                         contentPadding: EdgeInsets.zero,
                       ),

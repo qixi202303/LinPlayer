@@ -1215,6 +1215,34 @@ class _ExoPlayNetworkPageState extends State<ExoPlayNetworkPage>
     await controller.seekTo(target);
   }
 
+  Future<void> _preloadFromHistoryPositionBestEffort({
+    required ServerAccess access,
+    required Duration startPosition,
+  }) async {
+    if (!widget.appState.preloadEnabled) return;
+    if (StreamPreloadService.instance.permanentlyDisabled) return;
+    if (startPosition <= Duration.zero) return;
+
+    final result = await StreamPreloadService.instance.preloadFirst3Seconds(
+      adapter: access.adapter,
+      auth: access.auth,
+      itemId: widget.itemId,
+      startPosition: startPosition,
+      exoPlayer: true,
+      selectedMediaSourceId: _selectedMediaSourceId,
+      audioStreamIndex: _selectedAudioStreamIndex,
+      subtitleStreamIndex: _selectedSubtitleStreamIndex,
+      preferredVideoVersion: widget.appState.preferredVideoVersion,
+    );
+
+    if (!mounted) return;
+    if (result.disabledNow) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('预加载失败，后续将不再尝试')),
+      );
+    }
+  }
+
   void _maybePreloadNextEpisode(Duration pos) {
     if (_nextEpisodePreloadTriggered) return;
     if (!widget.appState.preloadEnabled) return;
@@ -3252,6 +3280,16 @@ class _ExoPlayNetworkPageState extends State<ExoPlayNetworkPage>
       _overrideResumeImmediately = false;
       Duration? resumeTarget;
       if (start != null && start > Duration.zero) {
+        final access = _serverAccess;
+        if (access != null) {
+          unawaited(
+            _preloadFromHistoryPositionBestEffort(
+              access: access,
+              startPosition: start,
+            ),
+          );
+        }
+
         final target = _safeSeekTarget(start, controller.value.duration);
         _deferProgressReporting = true;
         if (resumeImmediately) {

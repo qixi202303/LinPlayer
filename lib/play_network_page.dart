@@ -486,6 +486,13 @@ class _PlayNetworkPageState extends State<PlayNetworkPage>
       _overrideResumeImmediately = false;
       _skipAutoResumeOnce = false;
       if (!skipAutoResume && start != null && start > Duration.zero) {
+        unawaited(
+          _preloadFromHistoryPositionBestEffort(
+            access: access,
+            startPosition: start,
+          ),
+        );
+
         final target = _safeSeekTarget(start, _playerService.duration);
         _deferProgressReporting = true;
         if (resumeImmediately) {
@@ -773,6 +780,35 @@ class _PlayNetworkPageState extends State<PlayNetworkPage>
 
     final target = _safeSeekTarget(ts.end, _playerService.duration);
     await _playerService.seek(target, flushBuffer: _flushBufferOnSeek);
+  }
+
+  Future<void> _preloadFromHistoryPositionBestEffort({
+    required ServerAccess access,
+    required Duration startPosition,
+  }) async {
+    if (!widget.appState.preloadEnabled) return;
+    if (StreamPreloadService.instance.permanentlyDisabled) return;
+    if (startPosition <= Duration.zero) return;
+
+    final result = await StreamPreloadService.instance.preloadFirst3Seconds(
+      adapter: access.adapter,
+      auth: access.auth,
+      itemId: widget.itemId,
+      startPosition: startPosition,
+      exoPlayer: false,
+      selectedMediaSourceId: _selectedMediaSourceId,
+      audioStreamIndex: _selectedAudioStreamIndex,
+      subtitleStreamIndex: _selectedSubtitleStreamIndex,
+      preferredVideoVersion: widget.appState.preferredVideoVersion,
+      httpProxyUrl: _playbackHttpProxyUrl,
+    );
+
+    if (!mounted) return;
+    if (result.disabledNow) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('预加载失败，后续将不再尝试')),
+      );
+    }
   }
 
   void _maybePreloadNextEpisode(Duration pos) {

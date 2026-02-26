@@ -42,16 +42,22 @@ class StreamPreloadService {
   final Map<String, Future<StreamPreloadResult>> _inFlight =
       <String, Future<StreamPreloadResult>>{};
 
-  String _keyFor(ServerAuthSession auth, String itemId) {
+  String _keyFor(
+    ServerAuthSession auth,
+    String itemId, {
+    required Duration startPosition,
+  }) {
     final base = auth.baseUrl.trim().toLowerCase();
     final id = itemId.trim();
-    return '$base|$id';
+    final startSec = startPosition <= Duration.zero ? 0 : startPosition.inSeconds;
+    return '$base|$id|$startSec';
   }
 
   Future<StreamPreloadResult> preloadFirst3Seconds({
     required MediaServerAdapter adapter,
     required ServerAuthSession auth,
     required String itemId,
+    Duration startPosition = Duration.zero,
     bool exoPlayer = false,
     String? selectedMediaSourceId,
     int? audioStreamIndex,
@@ -60,7 +66,13 @@ class StreamPreloadService {
         VideoVersionPreference.defaultVersion,
     String? httpProxyUrl,
   }) async {
-    final key = _keyFor(auth, itemId);
+    final safeStartPosition =
+        startPosition < Duration.zero ? Duration.zero : startPosition;
+    final key = _keyFor(
+      auth,
+      itemId,
+      startPosition: safeStartPosition,
+    );
     if (_permanentlyDisabled) {
       return const StreamPreloadResult(StreamPreloadStatus.skippedDisabled);
     }
@@ -101,8 +113,9 @@ class StreamPreloadService {
             audioStreamIndex: audioStreamIndex,
             subtitleStreamIndex: subtitleStreamIndex,
           );
-          final bitrate = _asInt(ms?['Bitrate']);
+          final bitrate = _estimateBitrateBitsPerSecond(ms);
           final bytesToFetch = _estimateBytesToFetch(bitrate);
+          final sizeBytes = _asInt(ms?['Size']);
           final headers = <String, String>{
             ...adapter.buildStreamHeaders(auth),
             'User-Agent': preloadUserAgent,
@@ -111,6 +124,9 @@ class StreamPreloadService {
             url: streamUrl,
             headers: headers,
             bytesToFetch: bytesToFetch,
+            startPosition: safeStartPosition,
+            bitrateBitsPerSecond: bitrate,
+            sizeBytes: sizeBytes,
             httpProxyUrl: httpProxyUrl,
           );
           if (ok) {
@@ -151,10 +167,32 @@ class StreamPreloadService {
     return estimated.clamp(_minBytes, _maxBytes);
   }
 
+  int? _estimateBitrateBitsPerSecond(Map<String, dynamic>? mediaSource) {
+    final bps = _asInt(mediaSource?['Bitrate']);
+    if (bps != null && bps > 0) return bps;
+
+    final sizeBytes = _asInt(mediaSource?['Size']);
+    final runTimeTicks = _asInt(mediaSource?['RunTimeTicks']);
+    if (sizeBytes == null ||
+        sizeBytes <= 0 ||
+        runTimeTicks == null ||
+        runTimeTicks <= 0) {
+      return bps;
+    }
+
+    final seconds = runTimeTicks / 10000000.0;
+    if (seconds <= 0.5) return bps;
+    final estimatedBps = ((sizeBytes * 8) / seconds).round();
+    return estimatedBps > 0 ? estimatedBps : bps;
+  }
+
   Future<bool> _prefetch({
     required String url,
     required Map<String, String> headers,
     required int bytesToFetch,
+    required Duration startPosition,
+    required int? bitrateBitsPerSecond,
+    required int? sizeBytes,
     String? httpProxyUrl,
   }) async {
     if (kIsWeb) return false;
@@ -170,6 +208,9 @@ class StreamPreloadService {
         uri: uri,
         headers: headers,
         bytesToFetch: bytesToFetch,
+        startPosition: startPosition,
+        bitrateBitsPerSecond: bitrateBitsPerSecond,
+        sizeBytes: sizeBytes,
       );
     } finally {
       try {
@@ -208,19 +249,43 @@ class StreamPreloadService {
     required Uri uri,
     required Map<String, String> headers,
     required int bytesToFetch,
+    required Duration startPosition,
+    required int? bitrateBitsPerSecond,
+    required int? sizeBytes,
   }) async {
+    final useOffset = startPosition > Duration.zero;
+    final sniffBytes = useOffset ? 512 * 1024 : bytesToFetch;
     final first = await _get(
       client: client,
       uri: uri,
       headers: headers,
-      rangeBytes: bytesToFetch,
+      rangeStartBytes: 0,
+      rangeBytes: sniffBytes,
       captureLimitBytes: 512 * 1024,
     );
     if (!first.ok) return false;
 
     final playlistText = _asHlsPlaylistText(first);
     if (playlistText == null) {
-      return first.bytesRead > 0;
+      if (!useOffset) return first.bytesRead > 0;
+
+      final startByte = _estimateRangeStartBytes(
+        startPosition: startPosition,
+        bytesToFetch: bytesToFetch,
+        bitrateBitsPerSecond: bitrateBitsPerSecond,
+        sizeBytes: sizeBytes,
+      );
+      if (startByte <= 0) return first.bytesRead > 0;
+
+      final second = await _get(
+        client: client,
+        uri: first.effectiveUri,
+        headers: headers,
+        rangeStartBytes: startByte,
+        rangeBytes: bytesToFetch,
+        captureLimitBytes: 0,
+      );
+      return second.ok && second.bytesRead > 0;
     }
 
     final playlistUri = first.effectiveUri;
@@ -229,7 +294,34 @@ class StreamPreloadService {
       playlistUri: playlistUri,
       playlistText: playlistText,
       headers: headers,
+      startPosition: startPosition,
     );
+  }
+
+  int _estimateRangeStartBytes({
+    required Duration startPosition,
+    required int bytesToFetch,
+    required int? bitrateBitsPerSecond,
+    required int? sizeBytes,
+  }) {
+    if (startPosition <= Duration.zero) return 0;
+    final bps = bitrateBitsPerSecond ?? 0;
+    if (bps <= 0) return 0;
+
+    final seconds = startPosition.inMilliseconds / 1000.0;
+    if (seconds <= 0) return 0;
+
+    final bytesPerSecond = bps / 8.0;
+    var start = (bytesPerSecond * seconds).round();
+    if (start < 0) start = 0;
+
+    final size = sizeBytes ?? 0;
+    if (size > 0 && bytesToFetch > 0) {
+      final maxStart = (size - bytesToFetch).clamp(0, size);
+      if (start > maxStart) start = maxStart;
+    }
+
+    return start;
   }
 
   Future<bool> _prefetchHls({
@@ -237,6 +329,7 @@ class StreamPreloadService {
     required Uri playlistUri,
     required String playlistText,
     required Map<String, String> headers,
+    required Duration startPosition,
   }) async {
     var parsed = _parseHls(playlistText, base: playlistUri);
     if (parsed == null) return false;
@@ -246,6 +339,7 @@ class StreamPreloadService {
         client: client,
         uri: parsed.variantPlaylistUri!,
         headers: headers,
+        rangeStartBytes: 0,
         rangeBytes: 512 * 1024,
         captureLimitBytes: 1024 * 1024,
       );
@@ -261,6 +355,7 @@ class StreamPreloadService {
         client: client,
         uri: parsed.initSegmentUri!,
         headers: headers,
+        rangeStartBytes: null,
         rangeBytes: null,
         captureLimitBytes: 0,
       );
@@ -270,7 +365,25 @@ class StreamPreloadService {
     var remainingMs = preloadDuration.inMilliseconds;
     var fetchedAny = false;
     var segmentCount = 0;
-    for (final seg in parsed.segments) {
+    final segs = parsed.segments;
+    var startIndex = 0;
+    if (startPosition > Duration.zero && segs.isNotEmpty) {
+      var remainingStartMs = startPosition.inMilliseconds;
+      for (var i = 0; i < segs.length; i++) {
+        final segDurMs = segs[i].durationMs > 0
+            ? segs[i].durationMs
+            : preloadDuration.inMilliseconds;
+        if (remainingStartMs < segDurMs) {
+          startIndex = i;
+          break;
+        }
+        remainingStartMs -= segDurMs;
+        startIndex = i + 1;
+      }
+      if (startIndex >= segs.length) startIndex = segs.length - 1;
+    }
+
+    for (final seg in segs.skip(startIndex)) {
       if (remainingMs <= 0) break;
       if (segmentCount >= 3) break;
 
@@ -278,6 +391,7 @@ class StreamPreloadService {
         client: client,
         uri: seg.uri,
         headers: headers,
+        rangeStartBytes: null,
         rangeBytes: null,
         captureLimitBytes: 0,
       );
@@ -306,6 +420,7 @@ class StreamPreloadService {
     required HttpClient client,
     required Uri uri,
     required Map<String, String> headers,
+    required int? rangeStartBytes,
     required int? rangeBytes,
     required int captureLimitBytes,
   }) async {
@@ -316,7 +431,10 @@ class StreamPreloadService {
       request.headers.set(k, v);
     });
     if (rangeBytes != null && rangeBytes > 0) {
-      request.headers.set(HttpHeaders.rangeHeader, 'bytes=0-${rangeBytes - 1}');
+      final rawStart = rangeStartBytes ?? 0;
+      final start = rawStart < 0 ? 0 : rawStart;
+      final end = start + rangeBytes - 1;
+      request.headers.set(HttpHeaders.rangeHeader, 'bytes=$start-$end');
     }
 
     final response = await request.close().timeout(const Duration(seconds: 10));
