@@ -21,6 +21,9 @@ public final class AppPrefs {
     private static final String KEY_REMOTE_TOKEN = "remote_token";
     private static final String KEY_REMOTE_PORT = "remote_port";
 
+    private static final String KEY_UI_PANEL_ALPHA = "ui_panel_alpha";
+    private static final String KEY_UI_BG_BLUR = "ui_bg_blur";
+
     private AppPrefs() {}
 
     private static SharedPreferences prefs(Context context) {
@@ -135,5 +138,33 @@ public final class AppPrefs {
     public static void setRemotePort(Context context, int port) {
         int p = port > 0 ? port : 0;
         prefs(context).edit().putInt(KEY_REMOTE_PORT, p).apply();
+    }
+
+    public static int getUiPanelAlphaPercent(Context context) {
+        int v = prefs(context).getInt(KEY_UI_PANEL_ALPHA, 28);
+        if (v < 5) v = 5;
+        if (v > 90) v = 90;
+        return v;
+    }
+
+    public static void setUiPanelAlphaPercent(Context context, int percent) {
+        int v = percent;
+        if (v < 5) v = 5;
+        if (v > 90) v = 90;
+        prefs(context).edit().putInt(KEY_UI_PANEL_ALPHA, v).apply();
+    }
+
+    public static int getUiBackgroundBlur(Context context) {
+        int v = prefs(context).getInt(KEY_UI_BG_BLUR, 8);
+        if (v < 0) v = 0;
+        if (v > 24) v = 24;
+        return v;
+    }
+
+    public static void setUiBackgroundBlur(Context context, int blurRadius) {
+        int v = blurRadius;
+        if (v < 0) v = 0;
+        if (v > 24) v = 24;
+        prefs(context).edit().putInt(KEY_UI_BG_BLUR, v).apply();
     }
 }

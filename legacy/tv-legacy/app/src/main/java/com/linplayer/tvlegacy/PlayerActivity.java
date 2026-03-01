@@ -23,6 +23,7 @@ import java.util.Map;
 public final class PlayerActivity extends AppCompatActivity {
     static final String EXTRA_URL = "url";
     static final String EXTRA_TITLE = "title";
+    static final String EXTRA_POSITION_MS = "position_ms";
 
     private SimpleExoPlayer player;
 
@@ -38,6 +39,7 @@ public final class PlayerActivity extends AppCompatActivity {
 
         String title = getIntent().getStringExtra(EXTRA_TITLE);
         String url = getIntent().getStringExtra(EXTRA_URL);
+        long positionMs = getIntent().getLongExtra(EXTRA_POSITION_MS, 0L);
 
         TextView titleText = findViewById(R.id.player_title);
         if (title != null && !title.trim().isEmpty()) {
@@ -78,6 +80,9 @@ public final class PlayerActivity extends AppCompatActivity {
         MediaItem item = MediaItem.fromUri(Uri.parse(url.trim()));
         player.setMediaItem(item);
         player.prepare();
+        if (positionMs > 0L) {
+            player.seekTo(positionMs);
+        }
         player.play();
         PlaybackSession.attach(player, titleText.getText() != null ? titleText.getText().toString() : "");
     }

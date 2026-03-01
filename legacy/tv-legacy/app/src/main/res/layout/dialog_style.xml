@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="18dp">
+
+    <TextView
+        android:id="@+id/style_alpha_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="透明度"
+        android:textSize="14sp" />
+
+    <SeekBar
+        android:id="@+id/style_alpha_seek"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:max="100" />
+
+    <TextView
+        android:id="@+id/style_blur_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="18dp"
+        android:text="模糊度"
+        android:textSize="14sp" />
+
+    <SeekBar
+        android:id="@+id/style_blur_seek"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:max="24" />
+</LinearLayout>
+

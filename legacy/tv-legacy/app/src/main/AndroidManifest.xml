@@ -56,6 +56,14 @@
             android:name=".PlayerActivity"
             android:exported="false" />
 
+        <activity
+            android:name=".SearchActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".LibraryDetailActivity"
+            android:exported="false" />
+
         <service
             android:name=".ProxyService"
             android:exported="false" />
