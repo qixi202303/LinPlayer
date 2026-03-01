@@ -38,17 +38,10 @@ public final class ServerConfig {
             String remark,
             String iconUrl,
             List<ServerLine> lines) {
-        String t = normalizeType(type);
-        String b = safeTrim(baseUrl);
-        // Legacy behavior: treat a pasted ".../emby" base URL as the root and then append "/emby" for API requests.
-        // This keeps old call sites working while allowing new configs to explicitly store apiPrefix/baseUrlUsed.
-        if ("emby".equals(t) || "jellyfin".equals(t)) {
-            b = stripTrailingPathSegment(b, "emby");
-        }
         this(
                 id,
-                t,
-                b,
+                normalizeType(type),
+                normalizeLegacyBaseUrl(type, baseUrl),
                 "emby",
                 apiKey,
                 "",
@@ -92,6 +85,17 @@ public final class ServerConfig {
         this.displayName = safeTrim(displayName);
         this.remark = safeTrim(remark);
         this.iconUrl = safeTrim(iconUrl);
+    }
+
+    private static String normalizeLegacyBaseUrl(String type, String baseUrl) {
+        String t = normalizeType(type);
+        String b = safeTrim(baseUrl);
+        // Legacy behavior: treat a pasted ".../emby" base URL as the root and then append "/emby" for API requests.
+        // This keeps old call sites working while allowing new configs to explicitly store apiPrefix/baseUrlUsed.
+        if ("emby".equals(t) || "jellyfin".equals(t)) {
+            b = stripTrailingPathSegment(b, "emby");
+        }
+        return b;
     }
 
     public static ServerConfig fromJson(JSONObject o) throws JSONException {
