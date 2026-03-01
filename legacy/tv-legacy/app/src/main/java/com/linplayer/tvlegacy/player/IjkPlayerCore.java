@@ -10,7 +10,9 @@ import android.view.SurfaceView;
 import android.view.View;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import com.linplayer.tvlegacy.BuildConfig;
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -98,6 +100,7 @@ final class IjkPlayerCore implements PlayerCore {
         IjkMediaPlayer p = new IjkMediaPlayer();
         player = p;
         p.setAudioStreamType(AudioManager.STREAM_MUSIC);
+        applyDefaultOptions(p);
 
         p.setOnPreparedListener(
                 mp -> {
@@ -119,7 +122,7 @@ final class IjkPlayerCore implements PlayerCore {
 
         p.setOnErrorListener(
                 (mp, what, extra) -> {
-                    notifyFatalError("IjkPlayer error what=" + what + " extra=" + extra);
+                    postReleaseAndFatalError(p, buildIjkErrorMessage(what, extra));
                     return true;
                 });
 
@@ -127,8 +130,9 @@ final class IjkPlayerCore implements PlayerCore {
 
         try {
             Uri uri = Uri.parse(url);
-            if (headers != null && !headers.isEmpty()) {
-                p.setDataSource(appContext, uri, headers);
+            Map<String, String> effectiveHeaders = buildHeaders(headers);
+            if (effectiveHeaders != null && !effectiveHeaders.isEmpty()) {
+                p.setDataSource(appContext, uri, effectiveHeaders);
             } else {
                 p.setDataSource(appContext, uri);
             }
@@ -138,9 +142,9 @@ final class IjkPlayerCore implements PlayerCore {
             }
             p.prepareAsync();
         } catch (IOException e) {
-            notifyFatalError(String.valueOf(e.getMessage()));
+            postReleaseAndFatalError(p, buildExceptionMessage("打开媒体失败", e));
         } catch (Exception e) {
-            notifyFatalError(String.valueOf(e.getMessage()));
+            postReleaseAndFatalError(p, buildExceptionMessage("打开媒体失败", e));
         }
     }
 
@@ -285,14 +289,138 @@ final class IjkPlayerCore implements PlayerCore {
                 });
     }
 
-    private void notifyFatalError(@NonNull String message) {
-        Listener l = listener;
-        if (l == null) return;
+    private void postReleaseAndFatalError(@NonNull IjkMediaPlayer p, @NonNull String message) {
         main.post(
                 () -> {
+                    releasePlayer(p);
                     Listener l2 = listener;
                     if (l2 != null) l2.onFatalError(message);
                 });
+    }
+
+    private void releasePlayer(@NonNull IjkMediaPlayer p) {
+        if (player == p) player = null;
+        try {
+            p.setDisplay(null);
+        } catch (Exception ignored) {
+        }
+        try {
+            p.stop();
+        } catch (Exception ignored) {
+        }
+        try {
+            p.release();
+        } catch (Exception ignored) {
+        }
+    }
+
+    private static void applyDefaultOptions(@NonNull IjkMediaPlayer p) {
+        // Best-effort: some servers reject unknown User-Agent, resulting in "open input" errors.
+        try {
+            p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "user_agent", userAgent());
+        } catch (Throwable ignored) {
+        }
+        // Prefer TCP for RTSP to reduce packet loss on unstable networks.
+        try {
+            p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "rtsp_transport", "tcp");
+        } catch (Throwable ignored) {
+        }
+        // Keep going on transient network issues (if supported by the build).
+        try {
+            p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "reconnect", 1);
+        } catch (Throwable ignored) {
+        }
+    }
+
+    @NonNull
+    private static Map<String, String> buildHeaders(@Nullable Map<String, String> headers) {
+        Map<String, String> out = new HashMap<>();
+        if (headers != null && !headers.isEmpty()) out.putAll(headers);
+
+        // Add a default User-Agent (don't override an explicit one).
+        boolean hasUa = false;
+        for (String k : out.keySet()) {
+            if (k == null) continue;
+            if ("user-agent".equalsIgnoreCase(k.trim())) {
+                hasUa = true;
+                break;
+            }
+        }
+        if (!hasUa) out.put("User-Agent", userAgent());
+
+        return out;
+    }
+
+    @NonNull
+    private static String buildExceptionMessage(@NonNull String prefix, @NonNull Exception e) {
+        String msg = e.getMessage();
+        if (msg == null || msg.trim().isEmpty()) msg = e.toString();
+        return prefix + "：" + msg;
+    }
+
+    @NonNull
+    private static String buildIjkErrorMessage(int what, int extra) {
+        String human = ijkWhatToHuman(what);
+        if (human.isEmpty()) human = "未知错误";
+
+        String extraHuman = ijkExtraToHuman(extra);
+        if (!extraHuman.isEmpty()) {
+            return "播放失败：" + human + "（" + extraHuman + "，what=" + what + " extra=" + extra + "）。可尝试切换到 libVLC。";
+        }
+        return "播放失败：" + human + "（what=" + what + " extra=" + extra + "）。可尝试切换到 libVLC。";
+    }
+
+    @NonNull
+    private static String ijkWhatToHuman(int what) {
+        // Ijkplayer/ffmpeg error mappings (common ones).
+        // See also: IjkMediaPlayer's internal error codes in different builds.
+        switch (what) {
+            case -10000:
+                return "无法打开媒体源";
+            case -10001:
+                return "解析媒体信息失败";
+            case -10002:
+                return "打开输出失败";
+            case -10003:
+                return "网络/IO 错误";
+            case -10004:
+                return "媒体数据异常";
+            case -10005:
+                return "不支持的媒体格式";
+            case -10006:
+                return "操作超时";
+            case 100: // MEDIA_ERROR_SERVER_DIED
+                return "媒体服务异常";
+            case 1: // MEDIA_ERROR_UNKNOWN
+                return "媒体播放异常";
+            default:
+                return "";
+        }
+    }
+
+    @NonNull
+    private static String ijkExtraToHuman(int extra) {
+        if (extra == 0) return "";
+        // Negative errno values are common for network errors.
+        switch (extra) {
+            case -110:
+                return "连接超时";
+            case -104:
+                return "连接被重置";
+            case -111:
+                return "连接被拒绝";
+            case -2:
+                return "域名解析失败";
+            default:
+                return "";
+        }
+    }
+
+    @NonNull
+    private static String userAgent() {
+        String v = BuildConfig.VERSION_NAME != null ? BuildConfig.VERSION_NAME.trim() : "";
+        if (v.isEmpty()) v = "dev";
+        return "LinPlayer/" + v;
     }
 
     private static void loadLibsOnce() {
