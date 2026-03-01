@@ -33,7 +33,6 @@ import com.google.android.exoplayer2.source.TrackGroup;
 import com.google.android.exoplayer2.trackselection.DefaultTrackSelector;
 import com.google.android.exoplayer2.trackselection.MappingTrackSelector;
 import com.google.android.exoplayer2.trackselection.TrackSelectionOverride;
-import com.google.android.exoplayer2.trackselection.TrackSelectionOverrides;
 import com.google.android.exoplayer2.ui.PlayerView;
 import com.google.android.exoplayer2.upstream.DataSource;
 import com.linplayer.tvlegacy.backend.Backends;
@@ -692,24 +691,143 @@ public final class PlayerActivity extends AppCompatActivity {
         DefaultTrackSelector ts = trackSelector;
         if (ts == null) return;
 
-        TrackSelectionOverrides.Builder overrides = new TrackSelectionOverrides.Builder();
+        DefaultTrackSelector.Parameters.Builder builder = ts.buildUponParameters();
+
+        List<TrackSelectionOverride> overrides = new ArrayList<>(2);
         if (selectedAudioGroup != null && selectedAudioIndex >= 0) {
-            overrides.addOverride(
+            overrides.add(
                     new TrackSelectionOverride(
                             selectedAudioGroup, Collections.singletonList(selectedAudioIndex)));
         }
         if (!subtitlesOff && selectedSubtitleGroup != null && selectedSubtitleIndex >= 0) {
-            overrides.addOverride(
+            overrides.add(
                     new TrackSelectionOverride(
                             selectedSubtitleGroup, Collections.singletonList(selectedSubtitleIndex)));
         }
 
-        DefaultTrackSelector.ParametersBuilder builder = ts.buildUponParameters();
-        builder.setTrackSelectionOverrides(overrides.build());
+        boolean applied = applyTrackSelectionOverridesCompat(builder, overrides);
+        if (!applied) {
+            applyPreferredLanguagesFallback(builder);
+        }
+
         if (textRendererIndex >= 0) {
             builder.setRendererDisabled(textRendererIndex, subtitlesOff);
         }
         ts.setParameters(builder.build());
+    }
+
+    private static boolean applyTrackSelectionOverridesCompat(
+            @NonNull DefaultTrackSelector.Parameters.Builder builder,
+            @NonNull List<TrackSelectionOverride> overrides) {
+        // Newer ExoPlayer versions expose a TrackSelectionOverrides container; older/newer variants may
+        // expose direct builder APIs. Use reflection to keep this legacy module building across
+        // ExoPlayer 2.x API differences without pulling in Media3.
+        if (tryInvoke(builder, "setTrackSelectionOverrides", overrides)) return true;
+        TrackSelectionOverride[] array = overrides.toArray(new TrackSelectionOverride[0]);
+        if (tryInvoke(builder, "setTrackSelectionOverrides", (Object) array)) return true;
+
+        Object overridesObject = buildTrackSelectionOverridesObject(overrides);
+        if (overridesObject != null && tryInvoke(builder, "setTrackSelectionOverrides", overridesObject)) {
+            return true;
+        }
+
+        // Try clear + add style APIs.
+        tryInvoke(builder, "clearOverridesOfType", C.TRACK_TYPE_AUDIO);
+        tryInvoke(builder, "clearOverridesOfType", C.TRACK_TYPE_TEXT);
+        boolean allAdded = true;
+        for (TrackSelectionOverride o : overrides) {
+            if (!tryInvoke(builder, "addOverride", o) && !tryInvoke(builder, "setOverrideForType", o)) {
+                allAdded = false;
+            }
+        }
+        return allAdded && !overrides.isEmpty();
+    }
+
+    @Nullable
+    private static Object buildTrackSelectionOverridesObject(@NonNull List<TrackSelectionOverride> overrides) {
+        try {
+            Class<?> overridesClass =
+                    Class.forName("com.google.android.exoplayer2.trackselection.TrackSelectionOverrides");
+            Class<?> builderClass =
+                    Class.forName("com.google.android.exoplayer2.trackselection.TrackSelectionOverrides$Builder");
+            Object b = builderClass.getConstructor().newInstance();
+            for (TrackSelectionOverride o : overrides) {
+                tryInvoke(b, "addOverride", o);
+            }
+            Object built = builderClass.getMethod("build").invoke(b);
+            return overridesClass.isInstance(built) ? built : null;
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    private void applyPreferredLanguagesFallback(@NonNull DefaultTrackSelector.Parameters.Builder builder) {
+        if (selectedAudioGroup != null && selectedAudioIndex >= 0 && selectedAudioIndex < selectedAudioGroup.length) {
+            tryInvoke(
+                    builder,
+                    "setPreferredAudioLanguage",
+                    safe(selectedAudioGroup.getFormat(selectedAudioIndex).language));
+        } else {
+            tryInvoke(builder, "setPreferredAudioLanguage", (Object) null);
+        }
+
+        if (!subtitlesOff
+                && selectedSubtitleGroup != null
+                && selectedSubtitleIndex >= 0
+                && selectedSubtitleIndex < selectedSubtitleGroup.length) {
+            tryInvoke(
+                    builder,
+                    "setPreferredTextLanguage",
+                    safe(selectedSubtitleGroup.getFormat(selectedSubtitleIndex).language));
+        } else {
+            tryInvoke(builder, "setPreferredTextLanguage", (Object) null);
+        }
+    }
+
+    private static boolean tryInvoke(@NonNull Object target, @NonNull String methodName, Object... args) {
+        Class<?> cls = target.getClass();
+        for (java.lang.reflect.Method m : cls.getMethods()) {
+            if (!m.getName().equals(methodName)) continue;
+            Class<?>[] params = m.getParameterTypes();
+            if (params.length != args.length) continue;
+            if (!areArgsCompatible(params, args)) continue;
+            try {
+                m.setAccessible(true);
+                m.invoke(target, args);
+                return true;
+            } catch (Throwable ignored) {
+                // Keep trying other overloads.
+            }
+        }
+        return false;
+    }
+
+    private static boolean areArgsCompatible(@NonNull Class<?>[] params, @NonNull Object[] args) {
+        for (int i = 0; i < params.length; i++) {
+            Class<?> p = params[i];
+            Object a = args[i];
+            if (a == null) {
+                if (p.isPrimitive()) return false;
+                continue;
+            }
+            Class<?> ac = a.getClass();
+            if (p.isPrimitive()) p = primitiveToWrapper(p);
+            if (!p.isAssignableFrom(ac)) return false;
+        }
+        return true;
+    }
+
+    @NonNull
+    private static Class<?> primitiveToWrapper(@NonNull Class<?> p) {
+        if (p == boolean.class) return Boolean.class;
+        if (p == byte.class) return Byte.class;
+        if (p == char.class) return Character.class;
+        if (p == short.class) return Short.class;
+        if (p == int.class) return Integer.class;
+        if (p == long.class) return Long.class;
+        if (p == float.class) return Float.class;
+        if (p == double.class) return Double.class;
+        return p;
     }
 
     private void updateRendererIndices() {
