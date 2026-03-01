@@ -41,7 +41,6 @@
         android:layout_weight="1"
         android:ellipsize="end"
         android:maxLines="1"
-        android:text="Server"
+        android:text="@string/server_default_name"
         android:textSize="16sp" />
 </LinearLayout>
-

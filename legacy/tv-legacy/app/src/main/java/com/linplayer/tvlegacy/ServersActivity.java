@@ -78,7 +78,7 @@ public final class ServersActivity extends AppCompatActivity {
                                 refresh();
                                 Toast.makeText(
                                                 ServersActivity.this,
-                                                "Active: " + server.effectiveName(),
+                                                getString(R.string.toast_active, server.effectiveName()),
                                                 Toast.LENGTH_SHORT)
                                         .show();
                             }
@@ -128,7 +128,7 @@ public final class ServersActivity extends AppCompatActivity {
         RemoteInfo info = RemoteControl.ensureStarted(this);
         String url = info != null ? info.firstRemoteUrl() : "";
         if (qrUrlText != null) {
-            qrUrlText.setText(url.isEmpty() ? "No LAN IP" : url);
+            qrUrlText.setText(url.isEmpty() ? getString(R.string.no_lan_ip) : url);
         }
         if (qrImage != null) {
             Bitmap bmp = url.isEmpty() ? null : QrCodeUtil.render(url, dpToPx(280));
@@ -150,7 +150,7 @@ public final class ServersActivity extends AppCompatActivity {
 
     private void showManageDialog(ServerConfig server) {
         if (server == null || server.id == null || server.id.trim().isEmpty()) return;
-        String[] items = new String[] {"Edit", "Sync Lines", "Relogin", "Delete"};
+        String[] items = getResources().getStringArray(R.array.server_manage_items);
         new AlertDialog.Builder(this)
                 .setTitle(server.effectiveName())
                 .setItems(
@@ -174,21 +174,26 @@ public final class ServersActivity extends AppCompatActivity {
     private void confirmDelete(ServerConfig server) {
         if (server == null) return;
         new AlertDialog.Builder(this)
-                .setTitle("Delete?")
+                .setTitle(R.string.confirm_delete_title)
                 .setMessage(server.effectiveName())
                 .setPositiveButton(
-                        "Delete",
+                        R.string.delete,
                         (d, w) -> {
                             try {
                                 ServerStore.delete(getApplicationContext(), server.id);
-                                Toast.makeText(this, "Deleted", Toast.LENGTH_SHORT).show();
+                                Toast.makeText(this, getString(R.string.toast_deleted), Toast.LENGTH_SHORT).show();
                                 refresh();
                             } catch (JSONException e) {
-                                Toast.makeText(this, "Delete failed: " + e.getMessage(), Toast.LENGTH_LONG)
+                                Toast.makeText(
+                                                this,
+                                                getString(
+                                                        R.string.toast_delete_failed,
+                                                        String.valueOf(e.getMessage())),
+                                                Toast.LENGTH_LONG)
                                         .show();
                             }
                         })
-                .setNegativeButton("Cancel", null)
+                .setNegativeButton(R.string.cancel, null)
                 .show();
     }
 
@@ -196,10 +201,11 @@ public final class ServersActivity extends AppCompatActivity {
         if (server == null) return;
         String token = server.apiKey != null ? server.apiKey.trim() : "";
         if (token.isEmpty()) {
-            Toast.makeText(this, "Missing token. Relogin first.", Toast.LENGTH_LONG).show();
+            Toast.makeText(this, getString(R.string.toast_missing_token_relogin), Toast.LENGTH_LONG)
+                    .show();
             return;
         }
-        Toast.makeText(this, "Syncing...", Toast.LENGTH_SHORT).show();
+        Toast.makeText(this, getString(R.string.toast_syncing), Toast.LENGTH_SHORT).show();
         new Thread(
                         () -> {
                             try {
@@ -231,7 +237,11 @@ public final class ServersActivity extends AppCompatActivity {
                                 ServerStore.upsert(getApplicationContext(), updated, activate);
                                 runOnUiThread(
                                         () -> {
-                                            Toast.makeText(this, "Synced", Toast.LENGTH_SHORT).show();
+                                            Toast.makeText(
+                                                            this,
+                                                            getString(R.string.toast_synced),
+                                                            Toast.LENGTH_SHORT)
+                                                    .show();
                                             refresh();
                                         });
                             } catch (Exception e) {
@@ -239,7 +249,9 @@ public final class ServersActivity extends AppCompatActivity {
                                         () ->
                                                 Toast.makeText(
                                                                 this,
-                                                                "Sync failed: " + String.valueOf(e.getMessage()),
+                                                                getString(
+                                                                        R.string.toast_sync_failed,
+                                                                        String.valueOf(e.getMessage())),
                                                                 Toast.LENGTH_LONG)
                                                         .show());
                             }
@@ -252,10 +264,10 @@ public final class ServersActivity extends AppCompatActivity {
         if (server == null) return;
         String username = server.username != null ? server.username.trim() : "";
         if (username.isEmpty()) {
-            Toast.makeText(this, "Missing username", Toast.LENGTH_LONG).show();
+            Toast.makeText(this, getString(R.string.toast_missing_username), Toast.LENGTH_LONG).show();
             return;
         }
-        Toast.makeText(this, "Logging in...", Toast.LENGTH_SHORT).show();
+        Toast.makeText(this, getString(R.string.toast_logging_in), Toast.LENGTH_SHORT).show();
         new Thread(
                         () -> {
                             try {
@@ -327,7 +339,11 @@ public final class ServersActivity extends AppCompatActivity {
 
                                 runOnUiThread(
                                         () -> {
-                                            Toast.makeText(this, "Login OK", Toast.LENGTH_SHORT).show();
+                                            Toast.makeText(
+                                                            this,
+                                                            getString(R.string.toast_login_ok),
+                                                            Toast.LENGTH_SHORT)
+                                                    .show();
                                             refresh();
                                         });
                             } catch (Exception e) {
@@ -335,7 +351,9 @@ public final class ServersActivity extends AppCompatActivity {
                                         () ->
                                                 Toast.makeText(
                                                                 this,
-                                                                "Login failed: " + String.valueOf(e.getMessage()),
+                                                                getString(
+                                                                        R.string.toast_login_failed,
+                                                                        String.valueOf(e.getMessage())),
                                                                 Toast.LENGTH_LONG)
                                                         .show());
                             }

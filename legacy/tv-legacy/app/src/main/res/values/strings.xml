@@ -18,6 +18,34 @@
     <string name="edit_server">Edit Server</string>
     <string name="save">Save</string>
     <string name="delete">Delete</string>
+    <string name="cancel">Cancel</string>
+    <string name="confirm_delete_title">Delete?</string>
+
+    <string name="server_default_name">Server</string>
+
+    <string name="no_lan_ip">No LAN IP</string>
+
+    <string-array name="server_manage_items">
+        <item>Edit</item>
+        <item>Sync Lines</item>
+        <item>Relogin</item>
+        <item>Delete</item>
+    </string-array>
+
+    <string name="toast_active">Active: %1$s</string>
+    <string name="toast_deleted">Deleted</string>
+    <string name="toast_delete_failed">Delete failed: %1$s</string>
+    <string name="toast_missing_token_relogin">Missing token. Relogin first.</string>
+    <string name="toast_syncing">Syncing...</string>
+    <string name="toast_synced">Synced</string>
+    <string name="toast_sync_failed">Sync failed: %1$s</string>
+    <string name="toast_missing_username">Missing username</string>
+    <string name="toast_missing_base_url">Missing base url</string>
+    <string name="toast_logging_in">Logging in...</string>
+    <string name="toast_login_ok">Login OK</string>
+    <string name="toast_login_failed">Login failed: %1$s</string>
+    <string name="toast_saved">Saved</string>
+    <string name="toast_save_failed">Save failed: %1$s</string>
 
     <string name="qr_title">Scan QR</string>
     <string name="qr_loading">Loading...</string>

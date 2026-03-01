@@ -14,7 +14,7 @@
         android:id="@+id/server_name"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Server"
+        android:text="@string/server_default_name"
         android:textSize="16sp" />
 
     <TextView
@@ -22,7 +22,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="6dp"
-        android:text="type"
+        android:text=""
         android:textSize="12sp" />
 
     <TextView
@@ -30,7 +30,6 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="6dp"
-        android:text="remark"
+        android:text=""
         android:textSize="12sp" />
 </LinearLayout>
-

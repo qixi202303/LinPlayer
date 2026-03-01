@@ -1,0 +1,87 @@
+<resources>
+    <string name="app_name">LinPlayer TV 旧版</string>
+    <string name="home_title">主页</string>
+    <string name="settings_title">设置</string>
+    <string name="open_settings">设置</string>
+    <string name="subscription_hint">订阅地址</string>
+    <string name="save_subscription">保存订阅</string>
+    <string name="start_proxy">启动代理</string>
+    <string name="stop_proxy">停止代理</string>
+    <string name="status_unknown">状态：未知</string>
+
+    <string name="servers_title">服务器</string>
+    <string name="open_servers">服务器</string>
+    <string name="servers_hint">单击启用，长按管理。</string>
+    <string name="view_list">列表</string>
+    <string name="view_grid">网格</string>
+    <string name="add_server">添加服务器</string>
+    <string name="edit_server">编辑服务器</string>
+    <string name="save">保存</string>
+    <string name="delete">删除</string>
+    <string name="cancel">取消</string>
+    <string name="confirm_delete_title">确认删除？</string>
+
+    <string name="server_default_name">服务器</string>
+
+    <string name="no_lan_ip">无局域网 IP</string>
+
+    <string-array name="server_manage_items">
+        <item>编辑</item>
+        <item>同步线路</item>
+        <item>重新登录</item>
+        <item>删除</item>
+    </string-array>
+
+    <string name="toast_active">已启用：%1$s</string>
+    <string name="toast_deleted">已删除</string>
+    <string name="toast_delete_failed">删除失败：%1$s</string>
+    <string name="toast_missing_token_relogin">缺少令牌，请先重新登录。</string>
+    <string name="toast_syncing">正在同步...</string>
+    <string name="toast_synced">同步完成</string>
+    <string name="toast_sync_failed">同步失败：%1$s</string>
+    <string name="toast_missing_username">缺少用户名</string>
+    <string name="toast_missing_base_url">缺少基础地址</string>
+    <string name="toast_logging_in">正在登录...</string>
+    <string name="toast_login_ok">登录成功</string>
+    <string name="toast_login_failed">登录失败：%1$s</string>
+    <string name="toast_saved">已保存</string>
+    <string name="toast_save_failed">保存失败：%1$s</string>
+
+    <string name="qr_title">扫描二维码</string>
+    <string name="qr_loading">加载中...</string>
+
+    <string name="server_base_url_hint">基础地址（例如：http://192.168.1.2:8096）</string>
+    <string name="server_api_key_hint">API 密钥 / 令牌</string>
+    <string name="server_username_hint">用户名</string>
+    <string name="server_password_hint">密码</string>
+    <string name="server_display_name_hint">显示名称（可选）</string>
+    <string name="server_remark_hint">备注（可选）</string>
+    <string name="server_icon_url_hint">图标 URL（可选）</string>
+    <string name="server_line_name_hint">线路名称（可选）</string>
+    <string name="server_lines_hint">其他线路：每行一条，名称|地址（可选）</string>
+    <string name="server_activate">保存后设为当前启用</string>
+
+    <string-array name="server_type_entries">
+        <item>Emby</item>
+        <item>Jellyfin</item>
+        <item>Plex</item>
+        <item>WebDAV</item>
+    </string-array>
+
+    <string name="media_section">媒体服务器</string>
+    <string name="media_server_url_hint">服务器地址（Emby/Jellyfin）</string>
+    <string name="media_api_key_hint">API 密钥 / 令牌</string>
+    <string name="save_media_server">保存媒体服务器</string>
+
+    <string-array name="media_backend_entries">
+        <item>Demo</item>
+        <item>Emby</item>
+        <item>Jellyfin</item>
+    </string-array>
+
+    <string name="open_episodes">剧集</string>
+    <string name="play">播放</string>
+    <string name="episode_list_title">剧集列表</string>
+    <string name="player_title">播放器</string>
+    <string name="back">返回</string>
+</resources>

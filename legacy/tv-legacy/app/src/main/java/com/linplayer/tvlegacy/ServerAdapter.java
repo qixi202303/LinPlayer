@@ -44,7 +44,10 @@ final class ServerAdapter extends RecyclerView.Adapter<ServerAdapter.Vh> {
     public void onBindViewHolder(@NonNull Vh holder, int position) {
         ServerConfig c = servers.get(position);
         boolean active = c != null && c.id != null && c.id.equals(activeId);
-        String name = c != null ? c.effectiveName() : "Server";
+        String name =
+                c != null
+                        ? c.effectiveName()
+                        : holder.itemView.getContext().getString(R.string.server_default_name);
         holder.name.setText((active ? "✓ " : "") + name);
 
         String remark = c != null ? safe(c.remark) : "";
@@ -106,4 +109,3 @@ final class ServerAdapter extends RecyclerView.Adapter<ServerAdapter.Vh> {
         return first.toUpperCase();
     }
 }
-

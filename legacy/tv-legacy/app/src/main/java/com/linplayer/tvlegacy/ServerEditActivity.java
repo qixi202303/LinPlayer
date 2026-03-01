@@ -88,24 +88,30 @@ public final class ServerEditActivity extends AppCompatActivity {
                     if (existing == null) return;
                     if (serverId == null || serverId.trim().isEmpty()) return;
                     new AlertDialog.Builder(this)
-                            .setTitle("Delete?")
+                            .setTitle(R.string.confirm_delete_title)
                             .setMessage(existing.effectiveName())
                             .setPositiveButton(
                                     getString(R.string.delete),
                                     (d, w) -> {
                                         try {
                                             ServerStore.delete(getApplicationContext(), serverId);
-                                            Toast.makeText(this, "Deleted", Toast.LENGTH_SHORT).show();
+                                            Toast.makeText(
+                                                            this,
+                                                            getString(R.string.toast_deleted),
+                                                            Toast.LENGTH_SHORT)
+                                                    .show();
                                             finish();
                                         } catch (JSONException e) {
                                             Toast.makeText(
                                                             this,
-                                                            "Delete failed: " + e.getMessage(),
+                                                            getString(
+                                                                    R.string.toast_delete_failed,
+                                                                    String.valueOf(e.getMessage())),
                                                             Toast.LENGTH_LONG)
                                                     .show();
                                         }
                                     })
-                            .setNegativeButton("Cancel", null)
+                            .setNegativeButton(R.string.cancel, null)
                             .show();
                 });
     }
@@ -124,11 +130,11 @@ public final class ServerEditActivity extends AppCompatActivity {
         }
 
         if (baseUrl.isEmpty()) {
-            Toast.makeText(this, "Missing base url", Toast.LENGTH_LONG).show();
+            Toast.makeText(this, getString(R.string.toast_missing_base_url), Toast.LENGTH_LONG).show();
             return;
         }
         if (username.trim().isEmpty()) {
-            Toast.makeText(this, "Missing username", Toast.LENGTH_LONG).show();
+            Toast.makeText(this, getString(R.string.toast_missing_username), Toast.LENGTH_LONG).show();
             return;
         }
 
@@ -167,16 +173,20 @@ public final class ServerEditActivity extends AppCompatActivity {
                                 iconUrl,
                                 lines);
                 ServerStore.upsert(getApplicationContext(), updated, activate);
-                Toast.makeText(this, "Saved", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, getString(R.string.toast_saved), Toast.LENGTH_SHORT).show();
                 finish();
             } catch (JSONException e) {
-                Toast.makeText(this, "Save failed: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                Toast.makeText(
+                                this,
+                                getString(R.string.toast_save_failed, String.valueOf(e.getMessage())),
+                                Toast.LENGTH_LONG)
+                        .show();
             }
             return;
         }
 
         if (saveBtn != null) saveBtn.setEnabled(false);
-        Toast.makeText(this, "Logging in...", Toast.LENGTH_SHORT).show();
+        Toast.makeText(this, getString(R.string.toast_logging_in), Toast.LENGTH_SHORT).show();
 
         String finalUsername = username;
         String finalPassword = password;
@@ -257,7 +267,11 @@ public final class ServerEditActivity extends AppCompatActivity {
                                 ServerStore.upsert(getApplicationContext(), updated, activate);
                                 runOnUiThread(
                                         () -> {
-                                            Toast.makeText(this, "Saved", Toast.LENGTH_SHORT).show();
+                                            Toast.makeText(
+                                                            this,
+                                                            getString(R.string.toast_saved),
+                                                            Toast.LENGTH_SHORT)
+                                                    .show();
                                             finish();
                                         });
                             } catch (Exception e) {
@@ -266,7 +280,9 @@ public final class ServerEditActivity extends AppCompatActivity {
                                             if (saveBtn != null) saveBtn.setEnabled(true);
                                             Toast.makeText(
                                                             this,
-                                                            "Save failed: " + String.valueOf(e.getMessage()),
+                                                            getString(
+                                                                    R.string.toast_save_failed,
+                                                                    String.valueOf(e.getMessage())),
                                                             Toast.LENGTH_LONG)
                                                     .show();
                                         });
