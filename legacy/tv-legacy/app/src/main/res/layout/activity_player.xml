@@ -6,12 +6,12 @@
     android:layout_height="match_parent"
     tools:context=".PlayerActivity">
 
-    <com.google.android.exoplayer2.ui.PlayerView
-        android:id="@+id/player_view"
+    <FrameLayout
+        android:id="@+id/player_container"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:keepScreenOn="true"
-        app:use_controller="false" />
+        android:background="#000000"
+        android:keepScreenOn="true" />
 
     <LinearLayout
         android:id="@+id/top_status_bar"

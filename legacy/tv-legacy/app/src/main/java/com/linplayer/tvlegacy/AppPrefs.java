@@ -24,6 +24,8 @@ public final class AppPrefs {
     private static final String KEY_UI_PANEL_ALPHA = "ui_panel_alpha";
     private static final String KEY_UI_BG_BLUR = "ui_bg_blur";
 
+    private static final String KEY_PLAYER_CORE = "player_core";
+
     private AppPrefs() {}
 
     private static SharedPreferences prefs(Context context) {
@@ -166,5 +168,17 @@ public final class AppPrefs {
         if (v < 0) v = 0;
         if (v > 24) v = 24;
         prefs(context).edit().putInt(KEY_UI_BG_BLUR, v).apply();
+    }
+
+    public static String getPlayerCore(Context context) {
+        String v = prefs(context).getString(KEY_PLAYER_CORE, "ijk");
+        String s = v != null ? v.trim().toLowerCase() : "ijk";
+        return ("ijk".equals(s) || "vlc".equals(s)) ? s : "ijk";
+    }
+
+    public static void setPlayerCore(Context context, String coreId) {
+        String v = coreId != null ? coreId.trim().toLowerCase() : "ijk";
+        if (!"ijk".equals(v) && !"vlc".equals(v)) v = "ijk";
+        prefs(context).edit().putString(KEY_PLAYER_CORE, v).apply();
     }
 }

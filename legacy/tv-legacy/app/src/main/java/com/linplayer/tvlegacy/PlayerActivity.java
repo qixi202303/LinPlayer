@@ -1,7 +1,6 @@
 package com.linplayer.tvlegacy;
 
 import android.net.TrafficStats;
-import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -22,21 +21,12 @@ import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
-import com.google.android.exoplayer2.C;
-import com.google.android.exoplayer2.Format;
-import com.google.android.exoplayer2.MediaItem;
-import com.google.android.exoplayer2.Player;
-import com.google.android.exoplayer2.SimpleExoPlayer;
-import com.google.android.exoplayer2.Tracks;
-import com.google.android.exoplayer2.source.DefaultMediaSourceFactory;
-import com.google.android.exoplayer2.source.TrackGroup;
-import com.google.android.exoplayer2.trackselection.DefaultTrackSelector;
-import com.google.android.exoplayer2.trackselection.MappingTrackSelector;
-import com.google.android.exoplayer2.trackselection.TrackSelectionOverride;
-import com.google.android.exoplayer2.ui.PlayerView;
-import com.google.android.exoplayer2.upstream.DataSource;
 import com.linplayer.tvlegacy.backend.Backends;
 import com.linplayer.tvlegacy.backend.Callback;
+import com.linplayer.tvlegacy.player.PlayerCore;
+import com.linplayer.tvlegacy.player.PlayerCoreType;
+import com.linplayer.tvlegacy.player.PlayerCores;
+import com.linplayer.tvlegacy.player.PlayerTrack;
 import com.linplayer.tvlegacy.remote.PlaybackSession;
 import com.linplayer.tvlegacy.servers.ServerConfig;
 import com.linplayer.tvlegacy.servers.ServerStore;
@@ -67,7 +57,7 @@ public final class PlayerActivity extends AppCompatActivity {
     private final Handler main = new Handler(Looper.getMainLooper());
     private final SimpleDateFormat clockFormat = new SimpleDateFormat("HH:mm", Locale.getDefault());
 
-    @Nullable private PlayerView playerView;
+    @Nullable private ViewGroup playerContainer;
     @Nullable private TextView titleText;
     @Nullable private TextView netSpeedText;
     @Nullable private TextView timeText;
@@ -84,8 +74,8 @@ public final class PlayerActivity extends AppCompatActivity {
     @Nullable private RecyclerView audioList;
     @Nullable private RecyclerView coreList;
 
-    @Nullable private SimpleExoPlayer player;
-    @Nullable private DefaultTrackSelector trackSelector;
+    @Nullable private PlayerCore playerCore;
+    @NonNull private PlayerCoreType coreType = PlayerCoreType.IJK;
 
     private String url = "";
     private String title = "";
@@ -107,20 +97,32 @@ public final class PlayerActivity extends AppCompatActivity {
     private final List<Episode> episodes = new ArrayList<>();
     private int selectedEpisodePos = -1;
 
-    private final List<TrackItem> subtitleTracks = new ArrayList<>();
-    private final List<TrackItem> audioTracks = new ArrayList<>();
-
-    private int textRendererIndex = -1;
     private boolean subtitlesOff = false;
-    @Nullable private TrackGroup selectedSubtitleGroup;
-    private int selectedSubtitleIndex = -1;
-    @Nullable private TrackGroup selectedAudioGroup;
-    private int selectedAudioIndex = -1;
+    @Nullable private Integer selectedSubtitleId;
+    @Nullable private Integer selectedAudioId;
+
+    private final List<PlayerTrack> subtitleTracks = new ArrayList<>();
+    private final List<PlayerTrack> audioTracks = new ArrayList<>();
 
     @Nullable private ChipAdapter episodesAdapter;
     @Nullable private ChipAdapter subtitlesAdapter;
     @Nullable private ChipAdapter audioAdapter;
     @Nullable private ChipAdapter coreAdapter;
+
+    private final PlayerCore.Listener coreListener =
+            new PlayerCore.Listener() {
+                @Override
+                public void onTracksChanged() {
+                    refreshTracksFromCore();
+                    rebuildTrackPanels();
+                }
+
+                @Override
+                public void onFatalError(@NonNull String message) {
+                    if (isFinishing() || isDestroyed()) return;
+                    Toast.makeText(PlayerActivity.this, safe(message), Toast.LENGTH_LONG).show();
+                }
+            };
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -144,7 +146,7 @@ public final class PlayerActivity extends AppCompatActivity {
             return;
         }
 
-        playerView = findViewById(R.id.player_view);
+        playerContainer = findViewById(R.id.player_container);
         titleText = findViewById(R.id.player_title);
         netSpeedText = findViewById(R.id.player_net_speed);
         timeText = findViewById(R.id.player_time);
@@ -177,16 +179,7 @@ public final class PlayerActivity extends AppCompatActivity {
         super.onStop();
         stopTicker();
         stopSeekCommit();
-
-        SimpleExoPlayer p = player;
-        player = null;
-        if (p != null) {
-            PlaybackSession.detach(p);
-            try {
-                p.release();
-            } catch (Exception ignored) {
-            }
-        }
+        releasePlayerCore(false);
     }
 
     @Override
@@ -234,13 +227,11 @@ public final class PlayerActivity extends AppCompatActivity {
         sb.setOnSeekBarChangeListener(
                 new SeekBar.OnSeekBarChangeListener() {
                     @Override
-                    public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                        if (!fromUser) return;
-                        SimpleExoPlayer p = player;
+                     public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                         if (!fromUser) return;
+                        PlayerCore p = playerCore;
                         if (p == null) return;
-                        long dur = p.getDuration();
-                        if (dur == C.TIME_UNSET) dur = 0L;
-                        dur = Math.max(0L, dur);
+                        long dur = Math.max(0L, p.getDurationMs());
                         if (dur <= 0L) return;
 
                         long next = (dur * clamp(progress, 0, SEEK_MAX)) / SEEK_MAX;
@@ -269,7 +260,7 @@ public final class PlayerActivity extends AppCompatActivity {
         episodesAdapter = new ChipAdapter(this::onEpisodeChipClicked);
         subtitlesAdapter = new ChipAdapter(this::onSubtitleChipClicked);
         audioAdapter = new ChipAdapter(this::onAudioChipClicked);
-        coreAdapter = new ChipAdapter(pos -> {});
+        coreAdapter = new ChipAdapter(this::onCoreChipClicked);
 
         if (episodesAdapter != null) {
             setupChipRecycler(episodesList, episodesAdapter, spacingPx);
@@ -285,7 +276,7 @@ public final class PlayerActivity extends AppCompatActivity {
         }
         if (coreAdapter != null) {
             setupChipRecycler(coreList, coreAdapter, spacingPx);
-            coreAdapter.setData(Collections.singletonList(new ChipItem("ExoPlayer", true, true)));
+            rebuildCorePanel();
         }
     }
 
@@ -294,7 +285,7 @@ public final class PlayerActivity extends AppCompatActivity {
         TextView tv = titleText;
         if (tv != null) tv.setText(display);
 
-        SimpleExoPlayer p = player;
+        PlayerCore p = playerCore;
         if (p != null) PlaybackSession.attach(p, display);
     }
 
@@ -302,40 +293,8 @@ public final class PlayerActivity extends AppCompatActivity {
         if (AppPrefs.isProxyEnabled(this)) {
             ProxyService.start(this);
         }
-
-        PlayerView pv = playerView;
-        if (pv == null) return;
-
-        Map<String, String> playbackHeaders = buildPlaybackHeaders(url);
-        DataSource.Factory dataSourceFactory = ExoNetwork.dataSourceFactory(this, playbackHeaders);
-        DefaultMediaSourceFactory mediaSourceFactory = new DefaultMediaSourceFactory(dataSourceFactory);
-
-        trackSelector = new DefaultTrackSelector(this);
-        SimpleExoPlayer p =
-                new SimpleExoPlayer.Builder(this)
-                        .setMediaSourceFactory(mediaSourceFactory)
-                        .setTrackSelector(trackSelector)
-                        .build();
-        player = p;
-        pv.setPlayer(p);
-
-        p.addListener(
-                new Player.Listener() {
-                    @Override
-                    public void onTracksChanged(@NonNull Tracks tracks) {
-                        updateRendererIndices();
-                        rebuildTrackPanels(tracks);
-                    }
-                });
-
-        p.setMediaItem(MediaItem.fromUri(Uri.parse(url)));
-        p.prepare();
-        if (startPositionMs > 0L) {
-            p.seekTo(startPositionMs);
-        }
-        p.play();
-
-        refreshTitle();
+        coreType = PlayerCoreType.fromId(AppPrefs.getPlayerCore(this), PlayerCoreType.IJK);
+        switchCore(coreType, startPositionMs, true);
     }
 
     private void loadEpisodesIfNeeded() {
@@ -478,12 +437,7 @@ public final class PlayerActivity extends AppCompatActivity {
 
         refreshTitle();
         rebuildEpisodePanel();
-
-        SimpleExoPlayer p = player;
-        if (p == null) return;
-        p.setMediaItem(MediaItem.fromUri(Uri.parse(url)));
-        p.prepare();
-        p.play();
+        openInCore(0L, true);
     }
 
     private void rebuildEpisodePanel() {
@@ -559,337 +513,224 @@ public final class PlayerActivity extends AppCompatActivity {
                 });
     }
 
+    private void onCoreChipClicked(int position) {
+        PlayerCoreType[] types = PlayerCoreType.values();
+        if (position < 0 || position >= types.length) return;
+        PlayerCoreType next = types[position];
+        if (next == coreType) return;
+
+        long pos = 0L;
+        PlayerCore p = playerCore;
+        if (p != null) pos = Math.max(0L, p.getPositionMs());
+        startPositionMs = pos;
+
+        switchCore(next, pos, true);
+        Toast.makeText(this, "Switched to " + next.displayName, Toast.LENGTH_SHORT).show();
+    }
+
+    private void rebuildCorePanel() {
+        ChipAdapter a = coreAdapter;
+        if (a == null) return;
+
+        List<ChipItem> items = new ArrayList<>();
+        for (PlayerCoreType t : PlayerCoreType.values()) {
+            items.add(new ChipItem(t.displayName, true, t == coreType));
+        }
+        a.setData(items);
+    }
+
+    private void switchCore(@NonNull PlayerCoreType nextType, long startPosMs, boolean playWhenReady) {
+        ViewGroup container = playerContainer;
+        if (container == null) return;
+
+        PlayerCore current = playerCore;
+        if (current != null && current.getType() == nextType) {
+            openInCore(startPosMs, playWhenReady);
+            return;
+        }
+
+        // Important: fully release native player(s) first, then GC, otherwise OOM is likely on API 19.
+        releasePlayerCore(true);
+
+        coreType = nextType;
+        AppPrefs.setPlayerCore(this, nextType.id);
+        rebuildCorePanel();
+
+        PlayerCore p = PlayerCores.create(this, nextType);
+        p.setListener(coreListener);
+        playerCore = p;
+
+        container.removeAllViews();
+        container.addView(
+                p.getView(),
+                new ViewGroup.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        openInCore(startPosMs, playWhenReady);
+        refreshTitle();
+        refreshTracksFromCore();
+        rebuildTrackPanels();
+    }
+
+    private void openInCore(long startPosMs, boolean playWhenReady) {
+        PlayerCore p = playerCore;
+        if (p == null) return;
+        Map<String, String> playbackHeaders = buildPlaybackHeaders(url);
+        p.open(url, playbackHeaders, startPosMs, playWhenReady);
+        applyTrackSelection();
+    }
+
+    private void releasePlayerCore(boolean forceGc) {
+        PlayerCore p = playerCore;
+        playerCore = null;
+        boolean hadCore = p != null;
+        if (p != null) {
+            try {
+                p.setListener(null);
+            } catch (Exception ignored) {
+            }
+            PlaybackSession.detach(p);
+            try {
+                p.release();
+            } catch (Exception ignored) {
+            }
+        }
+
+        ViewGroup container = playerContainer;
+        if (container != null) {
+            try {
+                container.removeAllViews();
+            } catch (Exception ignored) {
+            }
+        }
+
+        if (forceGc && hadCore) forceReleaseGc();
+    }
+
+    private static void forceReleaseGc() {
+        try {
+            System.gc();
+            System.runFinalization();
+            System.gc();
+        } catch (Throwable ignored) {
+        }
+    }
+
     private void onSubtitleChipClicked(int position) {
         if (position == 0) {
             subtitlesOff = true;
-            selectedSubtitleGroup = null;
-            selectedSubtitleIndex = -1;
         } else if (position == 1) {
             subtitlesOff = false;
-            selectedSubtitleGroup = null;
-            selectedSubtitleIndex = -1;
+            selectedSubtitleId = null;
         } else {
             int idx = position - 2;
             if (idx < 0 || idx >= subtitleTracks.size()) return;
-            TrackItem t = subtitleTracks.get(idx);
+            PlayerTrack t = subtitleTracks.get(idx);
             subtitlesOff = false;
-            selectedSubtitleGroup = t.group;
-            selectedSubtitleIndex = t.trackIndex;
+            selectedSubtitleId = t.id;
         }
         applyTrackSelection();
-        refreshTrackPanels();
+        rebuildTrackPanels();
     }
 
     private void onAudioChipClicked(int position) {
         if (position == 0) {
-            selectedAudioGroup = null;
-            selectedAudioIndex = -1;
+            selectedAudioId = null;
         } else {
             int idx = position - 1;
             if (idx < 0 || idx >= audioTracks.size()) return;
-            TrackItem t = audioTracks.get(idx);
-            selectedAudioGroup = t.group;
-            selectedAudioIndex = t.trackIndex;
+            PlayerTrack t = audioTracks.get(idx);
+            selectedAudioId = t.id;
         }
         applyTrackSelection();
-        refreshTrackPanels();
+        rebuildTrackPanels();
     }
 
-    private void refreshTrackPanels() {
-        SimpleExoPlayer p = player;
-        if (p == null) return;
-        rebuildTrackPanels(p.getCurrentTracks());
-    }
-
-    private void rebuildTrackPanels(@Nullable Tracks tracks) {
-        buildSubtitlePanel(tracks);
-        buildAudioPanel(tracks);
-    }
-
-    private void buildSubtitlePanel(@Nullable Tracks tracks) {
+    private void refreshTracksFromCore() {
         subtitleTracks.clear();
-        boolean hasText = false;
+        audioTracks.clear();
 
-        if (tracks != null) {
-            for (Tracks.Group g : tracks.getGroups()) {
-                if (g.getType() != C.TRACK_TYPE_TEXT) continue;
-                hasText = true;
-                TrackGroup group = g.getMediaTrackGroup();
-                for (int i = 0; i < group.length; i++) {
-                    if (!g.isTrackSupported(i)) continue;
-                    subtitleTracks.add(
-                            new TrackItem(group, i, formatTextTrackLabel(group.getFormat(i), i)));
-                }
+        PlayerCore p = playerCore;
+        if (p != null) {
+            try {
+                subtitleTracks.addAll(p.getSubtitleTracks());
+            } catch (Exception ignored) {
+            }
+            try {
+                audioTracks.addAll(p.getAudioTracks());
+            } catch (Exception ignored) {
             }
         }
 
-        if (selectedSubtitleGroup != null
-                && !hasTrack(subtitleTracks, selectedSubtitleGroup, selectedSubtitleIndex)) {
-            selectedSubtitleGroup = null;
-            selectedSubtitleIndex = -1;
+        if (selectedSubtitleId != null && !containsTrackId(subtitleTracks, selectedSubtitleId)) {
+            selectedSubtitleId = null;
         }
+        if (selectedAudioId != null && !containsTrackId(audioTracks, selectedAudioId)) {
+            selectedAudioId = null;
+        }
+    }
 
+    private void rebuildTrackPanels() {
+        buildSubtitlePanel();
+        buildAudioPanel();
+    }
+
+    private void buildSubtitlePanel() {
         ChipAdapter a = subtitlesAdapter;
         if (a == null) return;
 
         List<ChipItem> items = new ArrayList<>();
-        if (!hasText) {
+        if (subtitleTracks.isEmpty()) {
             items.add(new ChipItem("No subtitles", false, false));
         } else {
             items.add(new ChipItem("Off", true, subtitlesOff));
-            items.add(new ChipItem("Auto", true, !subtitlesOff && selectedSubtitleGroup == null));
-            for (TrackItem t : subtitleTracks) {
-                boolean selected =
-                        !subtitlesOff
-                                && t.group == selectedSubtitleGroup
-                                && t.trackIndex == selectedSubtitleIndex;
+            items.add(new ChipItem("Auto", true, !subtitlesOff && selectedSubtitleId == null));
+            for (PlayerTrack t : subtitleTracks) {
+                boolean selected = !subtitlesOff && selectedSubtitleId != null && t.id == selectedSubtitleId;
                 items.add(new ChipItem(t.label, true, selected));
             }
         }
         a.setData(items);
     }
 
-    private void buildAudioPanel(@Nullable Tracks tracks) {
-        audioTracks.clear();
-        boolean hasAudio = false;
-
-        if (tracks != null) {
-            for (Tracks.Group g : tracks.getGroups()) {
-                if (g.getType() != C.TRACK_TYPE_AUDIO) continue;
-                hasAudio = true;
-                TrackGroup group = g.getMediaTrackGroup();
-                for (int i = 0; i < group.length; i++) {
-                    if (!g.isTrackSupported(i)) continue;
-                    audioTracks.add(
-                            new TrackItem(group, i, formatAudioTrackLabel(group.getFormat(i), i)));
-                }
-            }
-        }
-
-        if (selectedAudioGroup != null && !hasTrack(audioTracks, selectedAudioGroup, selectedAudioIndex)) {
-            selectedAudioGroup = null;
-            selectedAudioIndex = -1;
-        }
-
+    private void buildAudioPanel() {
         ChipAdapter a = audioAdapter;
         if (a == null) return;
 
         List<ChipItem> items = new ArrayList<>();
-        if (!hasAudio) {
+        if (audioTracks.isEmpty()) {
             items.add(new ChipItem("No audio tracks", false, false));
         } else {
-            items.add(new ChipItem("Auto", true, selectedAudioGroup == null));
-            for (TrackItem t : audioTracks) {
-                boolean selected = t.group == selectedAudioGroup && t.trackIndex == selectedAudioIndex;
+            items.add(new ChipItem("Auto", true, selectedAudioId == null));
+            for (PlayerTrack t : audioTracks) {
+                boolean selected = selectedAudioId != null && t.id == selectedAudioId;
                 items.add(new ChipItem(t.label, true, selected));
             }
         }
         a.setData(items);
     }
 
+    private static boolean containsTrackId(@NonNull List<PlayerTrack> list, @NonNull Integer id) {
+        if (list.isEmpty()) return false;
+        for (PlayerTrack t : list) {
+            if (t.id == id) return true;
+        }
+        return false;
+    }
+
     private void applyTrackSelection() {
-        DefaultTrackSelector ts = trackSelector;
-        if (ts == null) return;
+        PlayerCore p = playerCore;
+        if (p == null) return;
 
-        DefaultTrackSelector.Parameters.Builder builder = ts.buildUponParameters();
-
-        List<TrackSelectionOverride> overrides = new ArrayList<>(2);
-        if (selectedAudioGroup != null && selectedAudioIndex >= 0) {
-            overrides.add(
-                    new TrackSelectionOverride(
-                            selectedAudioGroup, Collections.singletonList(selectedAudioIndex)));
-        }
-        if (!subtitlesOff && selectedSubtitleGroup != null && selectedSubtitleIndex >= 0) {
-            overrides.add(
-                    new TrackSelectionOverride(
-                            selectedSubtitleGroup, Collections.singletonList(selectedSubtitleIndex)));
-        }
-
-        boolean applied = applyTrackSelectionOverridesCompat(builder, overrides);
-        if (!applied) {
-            applyPreferredLanguagesFallback(builder);
-        }
-
-        if (textRendererIndex >= 0) {
-            builder.setRendererDisabled(textRendererIndex, subtitlesOff);
-        }
-        ts.setParameters(builder.build());
-    }
-
-    private static boolean applyTrackSelectionOverridesCompat(
-            @NonNull DefaultTrackSelector.Parameters.Builder builder,
-            @NonNull List<TrackSelectionOverride> overrides) {
-        // Newer ExoPlayer versions expose a TrackSelectionOverrides container; older/newer variants may
-        // expose direct builder APIs. Use reflection to keep this legacy module building across
-        // ExoPlayer 2.x API differences without pulling in Media3.
-        if (tryInvoke(builder, "setTrackSelectionOverrides", overrides)) return true;
-        TrackSelectionOverride[] array = overrides.toArray(new TrackSelectionOverride[0]);
-        if (tryInvoke(builder, "setTrackSelectionOverrides", (Object) array)) return true;
-
-        Object overridesObject = buildTrackSelectionOverridesObject(overrides);
-        if (overridesObject != null && tryInvoke(builder, "setTrackSelectionOverrides", overridesObject)) {
-            return true;
-        }
-
-        // Try clear + add style APIs.
-        tryInvoke(builder, "clearOverridesOfType", C.TRACK_TYPE_AUDIO);
-        tryInvoke(builder, "clearOverridesOfType", C.TRACK_TYPE_TEXT);
-        boolean allAdded = true;
-        for (TrackSelectionOverride o : overrides) {
-            if (!tryInvoke(builder, "addOverride", o) && !tryInvoke(builder, "setOverrideForType", o)) {
-                allAdded = false;
-            }
-        }
-        return allAdded && !overrides.isEmpty();
-    }
-
-    @Nullable
-    private static Object buildTrackSelectionOverridesObject(@NonNull List<TrackSelectionOverride> overrides) {
         try {
-            Class<?> overridesClass =
-                    Class.forName("com.google.android.exoplayer2.trackselection.TrackSelectionOverrides");
-            Class<?> builderClass =
-                    Class.forName("com.google.android.exoplayer2.trackselection.TrackSelectionOverrides$Builder");
-            Object b = builderClass.getConstructor().newInstance();
-            for (TrackSelectionOverride o : overrides) {
-                tryInvoke(b, "addOverride", o);
-            }
-            Object built = builderClass.getMethod("build").invoke(b);
-            return overridesClass.isInstance(built) ? built : null;
-        } catch (Throwable ignored) {
-            return null;
-        }
-    }
-
-    private void applyPreferredLanguagesFallback(@NonNull DefaultTrackSelector.Parameters.Builder builder) {
-        if (selectedAudioGroup != null && selectedAudioIndex >= 0 && selectedAudioIndex < selectedAudioGroup.length) {
-            tryInvoke(
-                    builder,
-                    "setPreferredAudioLanguage",
-                    safe(selectedAudioGroup.getFormat(selectedAudioIndex).language));
-        } else {
-            tryInvoke(builder, "setPreferredAudioLanguage", (Object) null);
-        }
-
-        if (!subtitlesOff
-                && selectedSubtitleGroup != null
-                && selectedSubtitleIndex >= 0
-                && selectedSubtitleIndex < selectedSubtitleGroup.length) {
-            tryInvoke(
-                    builder,
-                    "setPreferredTextLanguage",
-                    safe(selectedSubtitleGroup.getFormat(selectedSubtitleIndex).language));
-        } else {
-            tryInvoke(builder, "setPreferredTextLanguage", (Object) null);
-        }
-    }
-
-    private static boolean tryInvoke(@NonNull Object target, @NonNull String methodName, Object... args) {
-        Class<?> cls = target.getClass();
-        for (java.lang.reflect.Method m : cls.getMethods()) {
-            if (!m.getName().equals(methodName)) continue;
-            Class<?>[] params = m.getParameterTypes();
-            if (params.length != args.length) continue;
-            if (!areArgsCompatible(params, args)) continue;
-            try {
-                m.setAccessible(true);
-                m.invoke(target, args);
-                return true;
-            } catch (Throwable ignored) {
-                // Keep trying other overloads.
-            }
-        }
-        return false;
-    }
-
-    private static boolean areArgsCompatible(@NonNull Class<?>[] params, @NonNull Object[] args) {
-        for (int i = 0; i < params.length; i++) {
-            Class<?> p = params[i];
-            Object a = args[i];
-            if (a == null) {
-                if (p.isPrimitive()) return false;
-                continue;
-            }
-            Class<?> ac = a.getClass();
-            if (p.isPrimitive()) p = primitiveToWrapper(p);
-            if (!p.isAssignableFrom(ac)) return false;
-        }
-        return true;
-    }
-
-    @NonNull
-    private static Class<?> primitiveToWrapper(@NonNull Class<?> p) {
-        if (p == boolean.class) return Boolean.class;
-        if (p == byte.class) return Byte.class;
-        if (p == char.class) return Character.class;
-        if (p == short.class) return Short.class;
-        if (p == int.class) return Integer.class;
-        if (p == long.class) return Long.class;
-        if (p == float.class) return Float.class;
-        if (p == double.class) return Double.class;
-        return p;
-    }
-
-    private void updateRendererIndices() {
-        DefaultTrackSelector ts = trackSelector;
-        if (ts == null) return;
-
-        int text = -1;
-        MappingTrackSelector.MappedTrackInfo info = ts.getCurrentMappedTrackInfo();
-        if (info != null) {
-            for (int i = 0; i < info.getRendererCount(); i++) {
-                if (info.getRendererType(i) == C.TRACK_TYPE_TEXT) {
-                    text = i;
-                    break;
-                }
-            }
-        }
-        textRendererIndex = text;
-    }
-
-    private static boolean hasTrack(List<TrackItem> list, TrackGroup group, int trackIndex) {
-        if (list == null || list.isEmpty() || group == null || trackIndex < 0) return false;
-        for (TrackItem t : list) {
-            if (t.group == group && t.trackIndex == trackIndex) return true;
-        }
-        return false;
-    }
-
-    private static String formatTextTrackLabel(Format f, int idx) {
-        if (f == null) return "Subtitle " + (idx + 1);
-        String label = safe(f.label);
-        if (!label.isEmpty()) return label;
-        String lang = languageLabel(f.language);
-        if (!lang.isEmpty()) return lang;
-        return "Subtitle " + (idx + 1);
-    }
-
-    private static String formatAudioTrackLabel(Format f, int idx) {
-        if (f == null) return "Audio " + (idx + 1);
-        String label = safe(f.label);
-        if (label.isEmpty()) label = languageLabel(f.language);
-        if (label.isEmpty()) label = "Audio " + (idx + 1);
-        if (f.channelCount > 0) label = label + " " + f.channelCount + "ch";
-        return label;
-    }
-
-    private static String languageLabel(String lang) {
-        String v = safe(lang);
-        if (v.isEmpty()) return "";
-        String[] parts = v.split("[-_]");
-        try {
-            Locale l;
-            if (parts.length == 1) {
-                l = new Locale(parts[0]);
-            } else if (parts.length >= 2) {
-                l = new Locale(parts[0], parts[1]);
-            } else {
-                l = new Locale(v);
-            }
-            String name = safe(l.getDisplayLanguage());
-            return !name.isEmpty() ? name : v;
+            p.selectAudioTrack(selectedAudioId);
         } catch (Exception ignored) {
-            return v;
+        }
+
+        try {
+            p.setSubtitlesEnabled(!subtitlesOff);
+            p.selectSubtitleTrack(!subtitlesOff ? selectedSubtitleId : null);
+        } catch (Exception ignored) {
         }
     }
 
@@ -907,13 +748,11 @@ public final class PlayerActivity extends AppCompatActivity {
     }
 
     private void commitSeekNow() {
-        SimpleExoPlayer p = player;
+        PlayerCore p = playerCore;
         SeekBar sb = seekBar;
         if (p == null || sb == null) return;
 
-        long dur = p.getDuration();
-        if (dur == C.TIME_UNSET) dur = 0L;
-        dur = Math.max(0L, dur);
+        long dur = Math.max(0L, p.getDurationMs());
         if (dur <= 0L) return;
 
         int progress = clamp(sb.getProgress(), 0, SEEK_MAX);
@@ -954,15 +793,13 @@ public final class PlayerActivity extends AppCompatActivity {
     }
 
     private void updateProgressUi() {
-        SimpleExoPlayer p = player;
+        PlayerCore p = playerCore;
         if (p == null) return;
 
-        long dur = p.getDuration();
-        if (dur == C.TIME_UNSET) dur = 0L;
-        dur = Math.max(0L, dur);
+        long dur = Math.max(0L, p.getDurationMs());
 
-        long pos = Math.max(0L, p.getCurrentPosition());
-        long buf = Math.max(0L, p.getBufferedPosition());
+        long pos = Math.max(0L, p.getPositionMs());
+        long buf = Math.max(0L, p.getBufferedPositionMs());
 
         TextView dt = durationText;
         if (dt != null) dt.setText(formatTimeMs(dur));
@@ -1051,18 +888,6 @@ public final class PlayerActivity extends AppCompatActivity {
         long h = total / 3600L;
         if (h > 0L) return String.format(Locale.US, "%d:%02d:%02d", h, m, s);
         return String.format(Locale.US, "%02d:%02d", m, s);
-    }
-
-    private static final class TrackItem {
-        final TrackGroup group;
-        final int trackIndex;
-        final String label;
-
-        TrackItem(TrackGroup group, int trackIndex, String label) {
-            this.group = group;
-            this.trackIndex = trackIndex;
-            this.label = safe(label);
-        }
     }
 
     private static final class ChipItem {

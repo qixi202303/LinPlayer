@@ -11,9 +11,11 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        maven {
+            url = uri("https://artifacts.videolan.org/libvlc-android/")
+        }
     }
 }
 
 rootProject.name = "linplayer-tv-legacy"
 include(":app")
-

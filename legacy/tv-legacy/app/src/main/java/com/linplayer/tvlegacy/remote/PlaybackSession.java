@@ -2,8 +2,8 @@ package com.linplayer.tvlegacy.remote;
 
 import android.os.Handler;
 import android.os.Looper;
-import com.google.android.exoplayer2.C;
-import com.google.android.exoplayer2.SimpleExoPlayer;
+import androidx.annotation.Nullable;
+import com.linplayer.tvlegacy.player.PlayerCore;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import org.json.JSONException;
@@ -13,12 +13,12 @@ public final class PlaybackSession {
     private static final Object LOCK = new Object();
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
 
-    private static SimpleExoPlayer player;
+    @Nullable private static PlayerCore player;
     private static String title = "";
 
     private PlaybackSession() {}
 
-    public static void attach(SimpleExoPlayer p, String titleText) {
+    public static void attach(@Nullable PlayerCore p, String titleText) {
         if (p == null) return;
         synchronized (LOCK) {
             player = p;
@@ -26,7 +26,7 @@ public final class PlaybackSession {
         }
     }
 
-    public static void detach(SimpleExoPlayer p) {
+    public static void detach(@Nullable PlayerCore p) {
         synchronized (LOCK) {
             if (player == p) {
                 player = null;
@@ -70,7 +70,7 @@ public final class PlaybackSession {
     }
 
     private static JSONObject applyControlLocked(String action, long value) {
-        SimpleExoPlayer p;
+        PlayerCore p;
         synchronized (LOCK) {
             p = player;
         }
@@ -78,25 +78,26 @@ public final class PlaybackSession {
 
         try {
             if ("toggle".equals(action)) {
-                p.setPlayWhenReady(!p.getPlayWhenReady());
+                if (p.isPlaying()) {
+                    p.pause();
+                } else {
+                    p.play();
+                }
             } else if ("play".equals(action)) {
-                p.setPlayWhenReady(true);
+                p.play();
             } else if ("pause".equals(action)) {
-                p.setPlayWhenReady(false);
+                p.pause();
             } else if ("stop".equals(action)) {
                 p.stop();
-                p.setPlayWhenReady(false);
             } else if ("seekbyms".equals(action) || "seek_by_ms".equals(action) || "seekby".equals(action)) {
-                long pos = p.getCurrentPosition();
-                long dur = p.getDuration();
-                if (dur == C.TIME_UNSET) dur = -1;
+                long pos = p.getPositionMs();
+                long dur = p.getDurationMs();
                 long next = pos + value;
                 if (next < 0) next = 0;
                 if (dur > 0 && next > dur) next = dur;
                 p.seekTo(next);
             } else if ("seektoms".equals(action) || "seek_to_ms".equals(action)) {
-                long dur = p.getDuration();
-                if (dur == C.TIME_UNSET) dur = -1;
+                long dur = p.getDurationMs();
                 long next = value;
                 if (next < 0) next = 0;
                 if (dur > 0 && next > dur) next = dur;
@@ -111,7 +112,7 @@ public final class PlaybackSession {
     }
 
     private static JSONObject buildStatusLocked() {
-        SimpleExoPlayer p;
+        PlayerCore p;
         String t;
         synchronized (LOCK) {
             p = player;
@@ -123,10 +124,9 @@ public final class PlaybackSession {
         long dur = 0;
         boolean playing = false;
         try {
-            pos = p.getCurrentPosition();
-            long d = p.getDuration();
-            dur = d == C.TIME_UNSET ? 0 : Math.max(0, d);
-            playing = p.getPlayWhenReady() && p.getPlaybackState() == com.google.android.exoplayer2.Player.STATE_READY;
+            pos = p.getPositionMs();
+            dur = Math.max(0, p.getDurationMs());
+            playing = p.isPlaying();
         } catch (Exception ignored) {
         }
 
@@ -166,4 +166,3 @@ public final class PlaybackSession {
         }
     }
 }
-

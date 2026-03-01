@@ -35,6 +35,14 @@ android {
         sourceCompatibility = JavaVersion.VERSION_1_8
         targetCompatibility = JavaVersion.VERSION_1_8
     }
+
+    packaging {
+        jniLibs {
+            pickFirsts += setOf(
+                "lib/**/libc++_shared.so",
+            )
+        }
+    }
 }
 
 dependencies {
@@ -47,8 +55,14 @@ dependencies {
     // Networking (API 19 compatible)
     implementation("com.squareup.okhttp3:okhttp:3.12.13")
 
-    // Playback (legacy ExoPlayer 2, API 19 compatible)
-    implementation("com.google.android.exoplayer:exoplayer:2.19.1")
+    // Playback cores
+    // ijkplayer
+    implementation("tv.danmaku.ijk.media:ijkplayer-java:0.8.8")
+    implementation("tv.danmaku.ijk.media:ijkplayer-armv7a:0.8.8")
+    implementation("tv.danmaku.ijk.media:ijkplayer-arm64:0.8.8")
+
+    // libVLC Android SDK (3.0.x)
+    implementation("org.videolan.android:libvlc-all:3.0.18")
 
     // QR code (Android 4.4 compatible)
     implementation("com.google.zxing:core:3.5.3")
