@@ -21,7 +21,8 @@ final class EmbyNav {
             return;
         }
 
-        EmbyClient client = new EmbyClient(activity, active.baseUrl, active.apiKey);
+        EmbyClient client =
+                new EmbyClient(activity, active.baseUrl, active.apiPrefix, active.apiKey, active.userId);
 
         if (item.isType("Series")) {
             Intent i = new Intent(activity, ShowDetailActivity.class);
@@ -82,4 +83,3 @@ final class EmbyNav {
         return s != null ? s.trim() : "";
     }
 }
-

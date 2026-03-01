@@ -4,6 +4,7 @@ import android.content.Context;
 import com.linplayer.tvlegacy.Episode;
 import com.linplayer.tvlegacy.NetworkClients;
 import com.linplayer.tvlegacy.Show;
+import com.linplayer.tvlegacy.servers.EmbyApi;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -21,17 +22,26 @@ final class EmbyLikeMediaBackend implements MediaBackend {
     private final Context appContext;
     private final String serverName;
     private final String apiKey;
+    private final String apiPrefix;
     private final HttpUrl baseUrl;
 
     private final Object userLock = new Object();
     private String userId;
 
-    EmbyLikeMediaBackend(Context context, String baseUrl, String apiKey, String serverName) {
+    EmbyLikeMediaBackend(
+            Context context,
+            String baseUrl,
+            String apiPrefix,
+            String apiKey,
+            String userId,
+            String serverName) {
         this.appContext = context.getApplicationContext();
         this.serverName = serverName != null && !serverName.trim().isEmpty() ? serverName.trim() : "Server";
 
         String rawKey = apiKey != null ? apiKey.trim() : "";
         this.apiKey = rawKey;
+        this.apiPrefix = normalizeApiPrefix(apiPrefix);
+        this.userId = userId != null ? userId.trim() : "";
 
         String rawBase = normalizeBaseUrl(baseUrl);
         this.baseUrl = rawBase.isEmpty() ? null : HttpUrl.parse(rawBase);
@@ -168,7 +178,9 @@ final class EmbyLikeMediaBackend implements MediaBackend {
         String p = path != null ? path.trim() : "";
         if (p.startsWith("/")) p = p.substring(1);
         HttpUrl.Builder b = baseUrl.newBuilder();
-        b.addPathSegment("emby");
+        if (!apiPrefix.isEmpty()) {
+            b.addPathSegments(apiPrefix);
+        }
         if (!p.isEmpty()) b.addPathSegments(p);
         if (apiKey != null && !apiKey.isEmpty()) b.addQueryParameter("api_key", apiKey);
         return b;
@@ -239,12 +251,11 @@ final class EmbyLikeMediaBackend implements MediaBackend {
 
     private JSONObject getJsonObject(HttpUrl url) throws IOException, JSONException {
         OkHttpClient client = NetworkClients.okHttp(appContext);
-        Request req =
-                new Request.Builder()
-                        .url(url)
-                        .get()
-                        .header("Accept", "application/json")
-                        .build();
+        Request.Builder rb = new Request.Builder().url(url).get().header("Accept", "application/json");
+        if (apiKey != null && !apiKey.isEmpty()) {
+            rb.header("X-Emby-Token", apiKey);
+        }
+        Request req = rb.build();
         try (Response resp = client.newCall(req).execute()) {
             if (!resp.isSuccessful()) {
                 throw new IOException(
@@ -324,8 +335,15 @@ final class EmbyLikeMediaBackend implements MediaBackend {
     }
 
     private static String normalizeBaseUrl(String baseUrl) {
-        String v = baseUrl != null ? baseUrl.trim() : "";
+        String v = EmbyApi.normalizeBaseUrl(baseUrl);
         while (v.endsWith("/")) v = v.substring(0, v.length() - 1);
         return v;
+    }
+
+    private static String normalizeApiPrefix(String prefix) {
+        String p = prefix != null ? prefix.trim() : "";
+        while (p.startsWith("/")) p = p.substring(1);
+        while (p.endsWith("/")) p = p.substring(0, p.length() - 1);
+        return p;
     }
 }

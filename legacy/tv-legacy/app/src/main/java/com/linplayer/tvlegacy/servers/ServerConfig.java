@@ -5,6 +5,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Locale;
 import org.json.JSONException;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -13,7 +14,12 @@ public final class ServerConfig {
     public final String id;
     public final String type;
     public final String baseUrl;
+    // API prefix after baseUrl, e.g. "", "emby", "jellyfin". For legacy configs missing this field,
+    // we default to "emby" and strip a trailing "/emby" from baseUrl to keep backward compatibility.
+    public final String apiPrefix;
     public final String apiKey;
+    // Cached user id from /Users/AuthenticateByName if available (best-effort).
+    public final String userId;
     public final String username;
     public final String password;
     public final String displayName;
@@ -32,6 +38,41 @@ public final class ServerConfig {
             String remark,
             String iconUrl,
             List<ServerLine> lines) {
+        String t = normalizeType(type);
+        String b = safeTrim(baseUrl);
+        // Legacy behavior: treat a pasted ".../emby" base URL as the root and then append "/emby" for API requests.
+        // This keeps old call sites working while allowing new configs to explicitly store apiPrefix/baseUrlUsed.
+        if ("emby".equals(t) || "jellyfin".equals(t)) {
+            b = stripTrailingPathSegment(b, "emby");
+        }
+        this(
+                id,
+                t,
+                b,
+                "emby",
+                apiKey,
+                "",
+                username,
+                password,
+                displayName,
+                remark,
+                iconUrl,
+                lines);
+    }
+
+    public ServerConfig(
+            String id,
+            String type,
+            String baseUrl,
+            String apiPrefix,
+            String apiKey,
+            String userId,
+            String username,
+            String password,
+            String displayName,
+            String remark,
+            String iconUrl,
+            List<ServerLine> lines) {
         this.id = safeTrim(id);
         this.type = normalizeType(type);
 
@@ -43,7 +84,9 @@ public final class ServerConfig {
         this.baseUrl = b;
         this.lines = normalizedLines;
 
+        this.apiPrefix = normalizeApiPrefix(apiPrefix);
         this.apiKey = safeTrim(apiKey);
+        this.userId = safeTrim(userId);
         this.username = safeTrim(username);
         this.password = safe(password);
         this.displayName = safeTrim(displayName);
@@ -59,11 +102,25 @@ public final class ServerConfig {
         if ((baseUrl == null || baseUrl.trim().isEmpty()) && lines != null && !lines.isEmpty()) {
             baseUrl = lines.get(0).url;
         }
+
+        boolean hasApiPrefix = o.has("apiPrefix");
+        String apiPrefix = hasApiPrefix ? o.optString("apiPrefix", "") : "emby";
+        if (!hasApiPrefix) {
+            // Backward compatibility: old versions effectively treated a pasted ".../emby" baseUrl the same
+            // as the root and then appended "/emby" for API requests.
+            String fixedBase = stripTrailingPathSegment(baseUrl, "emby");
+            if (!fixedBase.equals(baseUrl)) {
+                baseUrl = fixedBase;
+            }
+        }
+
         return new ServerConfig(
                 o.optString("id", ""),
                 o.optString("type", ""),
                 baseUrl,
+                apiPrefix,
                 o.optString("apiKey", ""),
+                o.optString("userId", ""),
                 o.optString("username", ""),
                 o.optString("password", ""),
                 o.optString("displayName", ""),
@@ -77,7 +134,9 @@ public final class ServerConfig {
         o.put("id", safeTrim(id));
         o.put("type", safeTrim(type));
         o.put("baseUrl", safeTrim(baseUrl));
+        o.put("apiPrefix", safeTrim(apiPrefix));
         o.put("apiKey", safeTrim(apiKey));
+        o.put("userId", safeTrim(userId));
         o.put("username", safeTrim(username));
         o.put("password", safe(password));
         o.put("displayName", safeTrim(displayName));
@@ -101,8 +160,19 @@ public final class ServerConfig {
     }
 
     private static String normalizeType(String type) {
-        String t = safeTrim(type).toLowerCase();
-        return t.isEmpty() ? "emby" : "emby";
+        String t = safeTrim(type).toLowerCase(Locale.US);
+        if (t.isEmpty()) return "emby";
+        if ("emby".equals(t) || "jellyfin".equals(t) || "plex".equals(t) || "webdav".equals(t)) {
+            return t;
+        }
+        return "emby";
+    }
+
+    private static String normalizeApiPrefix(String prefix) {
+        String p = safeTrim(prefix);
+        while (p.startsWith("/")) p = p.substring(1);
+        while (p.endsWith("/")) p = p.substring(0, p.length() - 1);
+        return p;
     }
 
     private static List<ServerLine> parseLines(JSONArray arr) throws JSONException {
@@ -158,5 +228,20 @@ public final class ServerConfig {
 
     private static String safe(String s) {
         return s != null ? s : "";
+    }
+
+    private static String stripTrailingPathSegment(String url, String segmentLower) {
+        String v = safeTrim(url);
+        while (v.endsWith("/")) v = v.substring(0, v.length() - 1);
+        if (v.isEmpty()) return v;
+
+        String lower = v.toLowerCase(Locale.US);
+        String suffix = "/" + (segmentLower != null ? segmentLower.trim().toLowerCase(Locale.US) : "");
+        if (suffix.length() <= 1) return v;
+        if (!lower.endsWith(suffix)) return v;
+
+        String out = v.substring(0, v.length() - suffix.length());
+        while (out.endsWith("/")) out = out.substring(0, out.length() - 1);
+        return out;
     }
 }

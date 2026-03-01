@@ -155,9 +155,11 @@ public final class ServerEditActivity extends AppCompatActivity {
                 ServerConfig updated =
                         new ServerConfig(
                                 serverId,
-                                "emby",
+                                ex.type,
                                 baseUrl,
+                                ex.apiPrefix,
                                 ex.apiKey,
+                                ex.userId,
                                 username,
                                 password,
                                 displayName.isEmpty() ? safe(ex.displayName) : displayName,
@@ -183,6 +185,9 @@ public final class ServerEditActivity extends AppCompatActivity {
         String finalIconUrl = iconUrl;
         String finalLineName = lineName;
         String baseUrlForLogin = baseUrl;
+        String fallbackApiPrefix = ex != null ? safe(ex.apiPrefix) : "emby";
+        String fallbackUserId = ex != null ? safe(ex.userId) : "";
+        String fallbackType = ex != null ? safe(ex.type) : "emby";
 
         new Thread(
                         () -> {
@@ -195,6 +200,10 @@ public final class ServerEditActivity extends AppCompatActivity {
                                                 finalPassword);
                                 String token = login != null ? login.accessToken : "";
                                 String resolvedBase = login != null ? login.baseUrl : baseUrlForLogin;
+                                String resolvedPrefix = login != null ? login.apiPrefix : fallbackApiPrefix;
+                                String resolvedUserId = login != null ? login.userId : fallbackUserId;
+                                String resolvedType =
+                                        (login != null && login.jellyfin) ? "jellyfin" : fallbackType;
                                 if (token.isEmpty()) throw new IllegalStateException("missing token");
 
                                 String resolvedName = finalDisplayName;
@@ -202,7 +211,11 @@ public final class ServerEditActivity extends AppCompatActivity {
                                     try {
                                         resolvedName =
                                                 EmbyApi.fetchServerName(
-                                                        getApplicationContext(), resolvedBase, token);
+                                                        getApplicationContext(),
+                                                        resolvedBase,
+                                                        token,
+                                                        resolvedPrefix,
+                                                        "jellyfin".equals(resolvedType));
                                     } catch (Exception ignored) {
                                         // best-effort
                                     }
@@ -216,7 +229,12 @@ public final class ServerEditActivity extends AppCompatActivity {
                                 try {
                                     List<ServerLine> synced =
                                             EmbyApi.fetchExtDomains(
-                                                    getApplicationContext(), resolvedBase, token, true);
+                                                    getApplicationContext(),
+                                                    resolvedBase,
+                                                    token,
+                                                    resolvedPrefix,
+                                                    "jellyfin".equals(resolvedType),
+                                                    true);
                                     merged = mergeLines(merged, synced);
                                 } catch (Exception ignored) {
                                     // best-effort
@@ -225,9 +243,11 @@ public final class ServerEditActivity extends AppCompatActivity {
                                 ServerConfig updated =
                                         new ServerConfig(
                                                 serverId,
-                                                "emby",
+                                                resolvedType,
                                                 resolvedBase,
+                                                resolvedPrefix,
                                                 token,
+                                                resolvedUserId,
                                                 finalUsername,
                                                 finalPassword,
                                                 resolvedName,

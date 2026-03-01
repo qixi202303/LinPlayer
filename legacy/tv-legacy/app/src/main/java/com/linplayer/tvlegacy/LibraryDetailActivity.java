@@ -71,7 +71,8 @@ public final class LibraryDetailActivity extends AppCompatActivity {
             return;
         }
 
-        EmbyClient client = new EmbyClient(this, active.baseUrl, active.apiKey);
+        EmbyClient client =
+                new EmbyClient(this, active.baseUrl, active.apiPrefix, active.apiKey, active.userId);
         new Thread(
                         () -> {
                             try {
@@ -150,4 +151,3 @@ public final class LibraryDetailActivity extends AppCompatActivity {
         return s != null ? s.trim() : "";
     }
 }
-

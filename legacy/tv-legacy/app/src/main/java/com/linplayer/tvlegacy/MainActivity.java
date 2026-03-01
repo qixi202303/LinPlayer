@@ -229,7 +229,8 @@ public final class MainActivity extends AppCompatActivity {
             return;
         }
 
-        EmbyClient client = new EmbyClient(this, active.baseUrl, active.apiKey);
+        EmbyClient client =
+                new EmbyClient(this, active.baseUrl, active.apiPrefix, active.apiKey, active.userId);
         new Thread(
                         () -> {
                             try {
@@ -288,7 +289,8 @@ public final class MainActivity extends AppCompatActivity {
                         ? "Series"
                         : (currentFavType == FavType.MOVIE ? "Movie" : "Episode");
 
-        EmbyClient client = new EmbyClient(this, active.baseUrl, active.apiKey);
+        EmbyClient client =
+                new EmbyClient(this, active.baseUrl, active.apiPrefix, active.apiKey, active.userId);
         new Thread(
                         () -> {
                             try {

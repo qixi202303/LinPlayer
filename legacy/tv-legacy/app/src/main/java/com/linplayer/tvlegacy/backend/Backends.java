@@ -17,7 +17,9 @@ public final class Backends {
         ServerConfig active = ServerStore.getActive(appContext);
         String type = active != null ? safe(active.type).toLowerCase() : "demo";
         String baseUrl = active != null ? safe(active.baseUrl) : "";
+        String apiPrefix = active != null ? safe(active.apiPrefix) : "";
         String apiKey = active != null ? safe(active.apiKey) : "";
+        String userId = active != null ? safe(active.userId) : "";
         String username = active != null ? safe(active.username) : "";
         String password = active != null ? safe(active.password) : "";
 
@@ -26,7 +28,11 @@ public final class Backends {
                         + "|"
                         + baseUrl
                         + "|"
+                        + apiPrefix
+                        + "|"
                         + Integer.toHexString(apiKey.hashCode())
+                        + "|"
+                        + safe(userId)
                         + "|"
                         + Integer.toHexString((username + ":" + password).hashCode());
         synchronized (LOCK) {
@@ -36,9 +42,10 @@ public final class Backends {
             mediaKey = key;
 
             if ("emby".equals(type)) {
-                media = new EmbyLikeMediaBackend(appContext, baseUrl, apiKey, "Emby");
+                media = new EmbyLikeMediaBackend(appContext, baseUrl, apiPrefix, apiKey, userId, "Emby");
             } else if ("jellyfin".equals(type)) {
-                media = new EmbyLikeMediaBackend(appContext, baseUrl, apiKey, "Jellyfin");
+                media =
+                        new EmbyLikeMediaBackend(appContext, baseUrl, apiPrefix, apiKey, userId, "Jellyfin");
             } else if ("plex".equals(type)) {
                 media = new PlexMediaBackend(appContext, baseUrl, apiKey);
             } else if ("webdav".equals(type)) {

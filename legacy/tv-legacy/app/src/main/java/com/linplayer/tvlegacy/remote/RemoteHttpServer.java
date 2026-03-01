@@ -263,7 +263,11 @@ final class RemoteHttpServer {
                 EmbyApi.LoginResult login =
                         EmbyApi.authenticateByName(appContext, baseUrl, username, password);
                 String apiBase = login != null ? login.baseUrl : baseUrl;
+                String apiPrefix = login != null ? login.apiPrefix : "emby";
                 String apiKey = login != null ? login.accessToken : "";
+                String userId = login != null ? login.userId : "";
+                boolean jellyfin = login != null && login.jellyfin;
+                String serverType = jellyfin ? "jellyfin" : "emby";
                 if (apiKey.isEmpty()) {
                     writeJson(out, jsonError("login failed"));
                     return;
@@ -272,7 +276,8 @@ final class RemoteHttpServer {
                 String resolvedName = displayName;
                 if (resolvedName == null || resolvedName.trim().isEmpty()) {
                     try {
-                        resolvedName = EmbyApi.fetchServerName(appContext, apiBase, apiKey);
+                        resolvedName =
+                                EmbyApi.fetchServerName(appContext, apiBase, apiKey, apiPrefix, jellyfin);
                     } catch (Exception ignored) {
                         // best-effort
                     }
@@ -284,7 +289,9 @@ final class RemoteHttpServer {
                     parsedLines = Collections.singletonList(new ServerLine("", apiBase));
                 }
                 try {
-                    List<ServerLine> synced = EmbyApi.fetchExtDomains(appContext, apiBase, apiKey, true);
+                    List<ServerLine> synced =
+                            EmbyApi.fetchExtDomains(
+                                    appContext, apiBase, apiKey, apiPrefix, jellyfin, true);
                     parsedLines = mergeLines(parsedLines, synced);
                 } catch (Exception ignored) {
                     // best-effort
@@ -293,9 +300,11 @@ final class RemoteHttpServer {
                 ServerConfig cfg =
                         new ServerConfig(
                                 "",
-                                "emby",
+                                serverType,
                                 apiBase,
+                                apiPrefix,
                                 apiKey,
+                                userId,
                                 username,
                                 password,
                                 resolvedName,

@@ -84,7 +84,8 @@ public final class SearchActivity extends AppCompatActivity {
             return;
         }
 
-        EmbyClient client = new EmbyClient(this, active.baseUrl, active.apiKey);
+        EmbyClient client =
+                new EmbyClient(this, active.baseUrl, active.apiPrefix, active.apiKey, active.userId);
         new Thread(
                         () -> {
                             try {

@@ -205,14 +205,21 @@ public final class ServersActivity extends AppCompatActivity {
                             try {
                                 List<ServerLine> synced =
                                         EmbyApi.fetchExtDomains(
-                                                getApplicationContext(), server.baseUrl, token, false);
+                                                getApplicationContext(),
+                                                server.baseUrl,
+                                                token,
+                                                server.apiPrefix,
+                                                server.isType("jellyfin"),
+                                                false);
                                 List<ServerLine> merged = mergeLines(server.lines, synced);
                                 ServerConfig updated =
                                         new ServerConfig(
                                                 server.id,
-                                                "emby",
+                                                server.type,
                                                 server.baseUrl,
+                                                server.apiPrefix,
                                                 token,
+                                                server.userId,
                                                 server.username,
                                                 server.password,
                                                 server.displayName,
@@ -260,12 +267,22 @@ public final class ServersActivity extends AppCompatActivity {
                                                 server.password);
                                 String token = login != null ? login.accessToken : "";
                                 String baseUrl = login != null ? login.baseUrl : server.baseUrl;
+                                String apiPrefix = login != null ? login.apiPrefix : server.apiPrefix;
+                                String userId = login != null ? login.userId : server.userId;
+                                boolean jellyfin = login != null && login.jellyfin;
+                                String serverType = jellyfin ? "jellyfin" : server.type;
                                 if (token.isEmpty()) throw new IllegalStateException("missing token");
 
                                 String name = server.displayName;
                                 if (name == null || name.trim().isEmpty()) {
                                     try {
-                                        name = EmbyApi.fetchServerName(getApplicationContext(), baseUrl, token);
+                                        name =
+                                                EmbyApi.fetchServerName(
+                                                        getApplicationContext(),
+                                                        baseUrl,
+                                                        token,
+                                                        apiPrefix,
+                                                        jellyfin);
                                     } catch (Exception ignored) {
                                         // best-effort
                                     }
@@ -279,7 +296,12 @@ public final class ServersActivity extends AppCompatActivity {
                                 try {
                                     List<ServerLine> synced =
                                             EmbyApi.fetchExtDomains(
-                                                    getApplicationContext(), baseUrl, token, true);
+                                                    getApplicationContext(),
+                                                    baseUrl,
+                                                    token,
+                                                    apiPrefix,
+                                                    jellyfin,
+                                                    true);
                                     merged = mergeLines(merged, synced);
                                 } catch (Exception ignored) {
                                     // best-effort
@@ -288,9 +310,11 @@ public final class ServersActivity extends AppCompatActivity {
                                 ServerConfig updated =
                                         new ServerConfig(
                                                 server.id,
-                                                "emby",
+                                                serverType,
                                                 baseUrl,
+                                                apiPrefix,
                                                 token,
+                                                userId,
                                                 server.username,
                                                 server.password,
                                                 name,

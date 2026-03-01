@@ -30,13 +30,17 @@ public final class EmbyApi {
 
     public static final class LoginResult {
         public final String baseUrl;
+        public final String apiPrefix;
         public final String accessToken;
         public final String userId;
+        public final boolean jellyfin;
 
-        LoginResult(String baseUrl, String accessToken, String userId) {
+        LoginResult(String baseUrl, String apiPrefix, String accessToken, String userId, boolean jellyfin) {
             this.baseUrl = safeTrim(baseUrl);
+            this.apiPrefix = normalizeApiPrefix(apiPrefix);
             this.accessToken = safeTrim(accessToken);
             this.userId = safeTrim(userId);
+            this.jellyfin = jellyfin;
         }
     }
 
@@ -46,51 +50,50 @@ public final class EmbyApi {
         if (context == null) throw new IllegalArgumentException("context == null");
 
         String rawBase = normalizeBaseUrl(baseUrl);
+        String authRoot = normalizeAuthRoot(rawBase);
         String user = safeTrim(username);
         String pass = password != null ? password : "";
-        if (rawBase.isEmpty()) throw new IllegalArgumentException("baseUrl is empty");
+        if (authRoot.isEmpty()) throw new IllegalArgumentException("baseUrl is empty");
         if (user.isEmpty()) throw new IllegalArgumentException("username is empty");
 
         OkHttpClient client = NetworkClients.okHttp(context.getApplicationContext());
 
         IOException lastIo = null;
-        for (String candidate : apiCandidates(rawBase)) {
-            HttpUrl url = buildApiUrl(candidate, "Users/AuthenticateByName");
-            if (url == null) continue;
 
-            JSONObject body = new JSONObject();
-            body.put("Username", user);
-            body.put("Pw", pass);
+        JSONObject body = new JSONObject();
+        body.put("Username", user);
+        body.put("Pw", pass);
+        // Some servers accept "Password" instead of "Pw". Send both for compatibility (matches Flutter impl).
+        body.put("Password", pass);
 
-            Request req =
-                    new Request.Builder()
-                            .url(url)
-                            .post(RequestBody.create(JSON, body.toString()))
-                            .header("Accept", "application/json")
-                            .header("Content-Type", "application/json")
-                            .header("Authorization", authorizationValue(context, null, null))
-                            .header("X-Emby-Authorization", authorizationValue(context, null, null))
-                            .build();
+        List<String> baseCandidates = authBaseCandidates(authRoot);
+        List<String> prefixCandidates = defaultApiPrefixCandidates();
+        for (String baseCandidate : baseCandidates) {
+            for (String prefixCandidate : prefixCandidates) {
+                HttpUrl url = buildApiUrl(baseCandidate, prefixCandidate, "Users/AuthenticateByName");
+                if (url == null) continue;
 
-            try (Response resp = client.newCall(req).execute()) {
-                if (!resp.isSuccessful()) {
-                    // Most common failure when baseUrl is wrong: 404. Try next.
-                    lastIo = new IOException("HTTP " + resp.code() + " " + resp.message());
-                    continue;
+                // Emby-style Authorization
+                try {
+                    LoginResult ok =
+                            tryAuthenticate(client, context, url, body, baseCandidate, prefixCandidate, false);
+                    if (ok != null) return ok;
+                } catch (IOException e) {
+                    lastIo = e;
+                    // Most common failure when baseUrl/prefix is wrong: 404. Try next.
+                    if (isHttpCode(e, 404)) {
+                        continue;
+                    }
                 }
-                ResponseBody respBody = resp.body();
-                String s = respBody != null ? respBody.string() : "";
-                JSONObject root = new JSONObject(s);
-                String token = safeTrim(root.optString("AccessToken", ""));
-                JSONObject userObj = root.optJSONObject("User");
-                String userId = userObj != null ? safeTrim(userObj.optString("Id", "")) : "";
-                if (token.isEmpty()) {
-                    lastIo = new IOException("missing AccessToken");
-                    continue;
+
+                // Jellyfin-style Authorization (fallback)
+                try {
+                    LoginResult ok =
+                            tryAuthenticate(client, context, url, body, baseCandidate, prefixCandidate, true);
+                    if (ok != null) return ok;
+                } catch (IOException e) {
+                    lastIo = e;
                 }
-                return new LoginResult(candidate, token, userId);
-            } catch (IOException e) {
-                lastIo = e;
             }
         }
         if (lastIo != null) throw lastIo;
@@ -98,6 +101,16 @@ public final class EmbyApi {
     }
 
     public static String fetchServerName(Context context, String baseUrl, @Nullable String token)
+            throws IOException, JSONException {
+        return fetchServerName(context, baseUrl, token, "emby", false);
+    }
+
+    public static String fetchServerName(
+            Context context,
+            String baseUrl,
+            @Nullable String token,
+            String apiPrefix,
+            boolean jellyfin)
             throws IOException, JSONException {
         if (context == null) throw new IllegalArgumentException("context == null");
         String b = normalizeBaseUrl(baseUrl);
@@ -109,15 +122,15 @@ public final class EmbyApi {
         String[] paths = new String[] {"System/Info/Public", "System/Info"};
         IOException last = null;
         for (String p : paths) {
-            HttpUrl url = buildApiUrl(b, p);
+            HttpUrl url = buildApiUrl(b, apiPrefix, p);
             if (url == null) continue;
             Request.Builder rb =
                     new Request.Builder()
                             .url(url)
                             .get()
                             .header("Accept", "application/json")
-                            .header("Authorization", authorizationValue(context, t, null))
-                            .header("X-Emby-Authorization", authorizationValue(context, t, null));
+                            .header("Content-Type", "application/json");
+            applyAuthorizationHeaders(rb, context, jellyfin, t, null);
             if (!t.isEmpty()) {
                 rb.header("X-Emby-Token", t);
             }
@@ -143,6 +156,17 @@ public final class EmbyApi {
 
     public static List<ServerLine> fetchExtDomains(
             Context context, String baseUrl, String token, boolean allowFailure) throws IOException {
+        return fetchExtDomains(context, baseUrl, token, "emby", false, allowFailure);
+    }
+
+    public static List<ServerLine> fetchExtDomains(
+            Context context,
+            String baseUrl,
+            String token,
+            String apiPrefix,
+            boolean jellyfin,
+            boolean allowFailure)
+            throws IOException {
         if (context == null) throw new IllegalArgumentException("context == null");
 
         String b = normalizeBaseUrl(baseUrl);
@@ -151,19 +175,19 @@ public final class EmbyApi {
 
         OkHttpClient client = NetworkClients.okHttp(context.getApplicationContext());
 
-        List<HttpUrl> urls = extDomainUrls(b, t);
+        List<HttpUrl> urls = extDomainUrls(b, t, apiPrefix);
         IOException last = null;
         for (HttpUrl url : urls) {
             if (url == null) continue;
-            Request req =
+            Request.Builder rb =
                     new Request.Builder()
                             .url(url)
                             .get()
                             .header("Accept", "application/json")
                             .header("X-Emby-Token", t)
-                            .header("Authorization", authorizationValue(context, t, null))
-                            .header("X-Emby-Authorization", authorizationValue(context, t, null))
-                            .build();
+                            .header("Content-Type", "application/json");
+            applyAuthorizationHeaders(rb, context, jellyfin, t, null);
+            Request req = rb.build();
             try (Response resp = client.newCall(req).execute()) {
                 if (!resp.isSuccessful()) {
                     last = new IOException("HTTP " + resp.code() + " " + resp.message());
@@ -205,49 +229,46 @@ public final class EmbyApi {
     }
 
     private static HttpUrl buildApiUrl(String baseUrl, String path) {
+        return buildApiUrl(baseUrl, "emby", path);
+    }
+
+    private static HttpUrl buildApiUrl(String baseUrl, String apiPrefix, String path) {
         String b = safeTrim(baseUrl);
+        String prefix = normalizeApiPrefix(apiPrefix);
         String p = safeTrim(path);
         if (b.isEmpty() || p.isEmpty()) return null;
         HttpUrl base = HttpUrl.parse(b);
         if (base == null) return null;
         HttpUrl.Builder ub = base.newBuilder();
-        ub.addPathSegment("emby");
+        if (!prefix.isEmpty()) {
+            ub.addPathSegments(prefix);
+        }
+        if (p.startsWith("/")) p = p.substring(1);
         ub.addPathSegments(p);
         return ub.build();
     }
 
     private static List<HttpUrl> extDomainUrls(String baseUrl, String token) {
+        return extDomainUrls(baseUrl, token, "emby");
+    }
+
+    private static List<HttpUrl> extDomainUrls(String baseUrl, String token, String apiPrefix) {
         String b = safeTrim(baseUrl);
         String t = safeTrim(token);
         if (b.isEmpty() || t.isEmpty()) return Collections.emptyList();
 
-        List<String> bases = apiCandidates(b);
-        List<HttpUrl> out = new ArrayList<>(bases.size());
+        List<String> bases = authBaseCandidates(normalizeAuthRoot(b));
+        List<String> prefixes = apiPrefixCandidates(apiPrefix);
+
+        List<HttpUrl> out = new ArrayList<>();
         for (String base : bases) {
-            HttpUrl url = buildApiUrl(base, "System/Ext/ServerDomains");
-            if (url == null) continue;
-            out.add(url.newBuilder().addQueryParameter("X-Emby-Token", t).build());
+            for (String prefix : prefixes) {
+                HttpUrl url = buildApiUrl(base, prefix, "System/Ext/ServerDomains");
+                if (url == null) continue;
+                out.add(url.newBuilder().addQueryParameter("X-Emby-Token", t).build());
+            }
         }
-        return Collections.unmodifiableList(out);
-    }
-
-    private static List<String> apiCandidates(String baseUrl) {
-        String b = safeTrim(baseUrl);
-        if (b.isEmpty()) return Collections.emptyList();
-
-        Set<String> out = new LinkedHashSet<>();
-        String lower = b.toLowerCase(Locale.US);
-        if (lower.endsWith("/emby")) {
-            String without = b.substring(0, b.length() - "/emby".length());
-            while (without.endsWith("/")) without = without.substring(0, without.length() - 1);
-            if (!without.isEmpty()) out.add(without);
-            out.add(b);
-        } else {
-            out.add(b);
-            out.add(b + "/emby");
-        }
-
-        return Collections.unmodifiableList(new ArrayList<>(out));
+        return out.isEmpty() ? Collections.emptyList() : Collections.unmodifiableList(out);
     }
 
     public static String normalizeBaseUrl(String baseUrl) {
@@ -294,15 +315,32 @@ public final class EmbyApi {
         return out;
     }
 
+    private static void applyAuthorizationHeaders(
+            Request.Builder rb,
+            Context context,
+            boolean jellyfin,
+            @Nullable String token,
+            @Nullable String userId) {
+        if (rb == null) return;
+        String value = authorizationValue(context, jellyfin, token, userId);
+        if (value.isEmpty()) return;
+        if (jellyfin) {
+            rb.header("X-Emby-Authorization", value);
+        } else {
+            rb.header("Authorization", value);
+            rb.header("X-Emby-Authorization", value);
+        }
+    }
+
     private static String authorizationValue(
-            Context context, @Nullable String token, @Nullable String userId) {
+            Context context, boolean jellyfin, @Nullable String token, @Nullable String userId) {
         String deviceId = deviceId(context);
         String client = "LinPlayer TV Legacy";
         String device = "Android TV";
         String version = BuildConfig.VERSION_NAME;
 
         StringBuilder sb = new StringBuilder();
-        sb.append("Emby ");
+        sb.append(jellyfin ? "MediaBrowser " : "Emby ");
         if (userId != null && !userId.trim().isEmpty()) {
             sb.append("UserId=\"").append(userId.trim()).append("\", ");
         }
@@ -314,6 +352,155 @@ public final class EmbyApi {
             sb.append(", Token=\"").append(token.trim()).append("\"");
         }
         return sb.toString();
+    }
+
+    private static LoginResult tryAuthenticate(
+            OkHttpClient client,
+            Context context,
+            HttpUrl url,
+            JSONObject body,
+            String baseCandidate,
+            String apiPrefixCandidate,
+            boolean jellyfin)
+            throws IOException, JSONException {
+        if (client == null) throw new IllegalArgumentException("client == null");
+        if (context == null) throw new IllegalArgumentException("context == null");
+        if (url == null) throw new IllegalArgumentException("url == null");
+        if (body == null) throw new IllegalArgumentException("body == null");
+
+        Request.Builder rb =
+                new Request.Builder()
+                        .url(url)
+                        .post(RequestBody.create(JSON, body.toString()))
+                        .header("Accept", "application/json")
+                        .header("Content-Type", "application/json");
+        applyAuthorizationHeaders(rb, context, jellyfin, null, null);
+
+        try (Response resp = client.newCall(rb.build()).execute()) {
+            if (!resp.isSuccessful()) {
+                throw new IOException("HTTP " + resp.code() + " " + resp.message());
+            }
+            ResponseBody respBody = resp.body();
+            String s = respBody != null ? respBody.string() : "";
+            JSONObject root = new JSONObject(s);
+            String token = readToken(root);
+            String userId = readUserId(root);
+            if (token.isEmpty()) {
+                throw new IOException("missing AccessToken");
+            }
+            return new LoginResult(baseCandidate, apiPrefixCandidate, token, userId, jellyfin);
+        }
+    }
+
+    private static String readToken(JSONObject root) {
+        if (root == null) return "";
+        String token = safeTrim(root.optString("AccessToken", ""));
+        if (!token.isEmpty()) return token;
+        token = safeTrim(root.optString("accessToken", ""));
+        if (!token.isEmpty()) return token;
+        token = safeTrim(root.optString("Token", ""));
+        if (!token.isEmpty()) return token;
+        token = safeTrim(root.optString("token", ""));
+        return token;
+    }
+
+    private static String readUserId(JSONObject root) {
+        if (root == null) return "";
+        JSONObject userObj = root.optJSONObject("User");
+        if (userObj != null) {
+            String id = safeTrim(userObj.optString("Id", ""));
+            if (!id.isEmpty()) return id;
+            id = safeTrim(userObj.optString("id", ""));
+            if (!id.isEmpty()) return id;
+            id = safeTrim(userObj.optString("UserId", ""));
+            if (!id.isEmpty()) return id;
+            id = safeTrim(userObj.optString("userId", ""));
+            if (!id.isEmpty()) return id;
+        }
+        String id = safeTrim(root.optString("UserId", ""));
+        if (!id.isEmpty()) return id;
+        id = safeTrim(root.optString("userId", ""));
+        return id;
+    }
+
+    private static boolean isHttpCode(IOException e, int code) {
+        if (e == null) return false;
+        String msg = e.getMessage();
+        if (msg == null) return false;
+        return msg.startsWith("HTTP " + code + " ");
+    }
+
+    private static List<String> defaultApiPrefixCandidates() {
+        // Prefer no prefix first, to match the Flutter client's behavior for Jellyfin/reverse-proxy deployments.
+        List<String> out = new ArrayList<>(3);
+        out.add("");
+        out.add("jellyfin");
+        out.add("emby");
+        return Collections.unmodifiableList(out);
+    }
+
+    private static List<String> apiPrefixCandidates(String preferred) {
+        LinkedHashSet<String> set = new LinkedHashSet<>();
+        set.add(normalizeApiPrefix(preferred));
+        set.add("");
+        set.add("jellyfin");
+        set.add("emby");
+        ArrayList<String> out = new ArrayList<>(set.size());
+        for (String s : set) {
+            out.add(normalizeApiPrefix(s));
+        }
+        return Collections.unmodifiableList(out);
+    }
+
+    private static List<String> authBaseCandidates(String authRoot) {
+        String root = safeTrim(authRoot);
+        while (root.endsWith("/")) root = root.substring(0, root.length() - 1);
+        if (root.isEmpty()) return Collections.emptyList();
+
+        LinkedHashSet<String> set = new LinkedHashSet<>();
+        set.add(root);
+        set.add(root + "/emby");
+
+        ArrayList<String> out = new ArrayList<>(set.size());
+        for (String s : set) {
+            String v = safeTrim(s);
+            while (v.endsWith("/")) v = v.substring(0, v.length() - 1);
+            if (!v.isEmpty()) out.add(v);
+        }
+        return Collections.unmodifiableList(out);
+    }
+
+    private static String normalizeAuthRoot(String baseUrl) {
+        String v = normalizeBaseUrl(baseUrl);
+        if (v.isEmpty()) return "";
+        String out = v;
+        while (true) {
+            String next = stripTrailingPathSegment(out, "emby");
+            if (next.equals(out)) break;
+            out = next;
+        }
+        return out;
+    }
+
+    private static String normalizeApiPrefix(String prefix) {
+        String p = safeTrim(prefix);
+        while (p.startsWith("/")) p = p.substring(1);
+        while (p.endsWith("/")) p = p.substring(0, p.length() - 1);
+        return p;
+    }
+
+    private static String stripTrailingPathSegment(String url, String segmentLower) {
+        String v = safeTrim(url);
+        while (v.endsWith("/")) v = v.substring(0, v.length() - 1);
+        if (v.isEmpty()) return v;
+
+        String suffix = "/" + (segmentLower != null ? segmentLower.trim().toLowerCase(Locale.US) : "");
+        if (suffix.length() <= 1) return v;
+        if (!v.toLowerCase(Locale.US).endsWith(suffix)) return v;
+
+        String out = v.substring(0, v.length() - suffix.length());
+        while (out.endsWith("/")) out = out.substring(0, out.length() - 1);
+        return out;
     }
 
     private static String deviceId(Context context) {

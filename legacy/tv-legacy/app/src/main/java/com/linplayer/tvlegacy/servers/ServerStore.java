@@ -95,9 +95,11 @@ public final class ServerStore {
                         i,
                         new ServerConfig(
                                 id,
-                                "emby",
+                                config.type,
                                 config.baseUrl,
+                                config.apiPrefix,
                                 config.apiKey,
+                                config.userId,
                                 config.username,
                                 config.password,
                                 config.displayName,
@@ -112,9 +114,11 @@ public final class ServerStore {
             current.add(
                     new ServerConfig(
                             id,
-                            "emby",
+                            config.type,
                             config.baseUrl,
+                            config.apiPrefix,
                             config.apiKey,
+                            config.userId,
                             config.username,
                             config.password,
                             config.displayName,

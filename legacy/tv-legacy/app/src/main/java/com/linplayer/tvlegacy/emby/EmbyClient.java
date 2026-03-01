@@ -21,17 +21,20 @@ import org.json.JSONObject;
 public final class EmbyClient {
     private final Context appContext;
     private final String apiKey;
+    private final String apiPrefix;
     @Nullable private final HttpUrl baseUrl;
 
     private final Object userLock = new Object();
     @Nullable private String userId;
 
-    public EmbyClient(Context context, String baseUrl, String apiKey) {
+    public EmbyClient(Context context, String baseUrl, String apiPrefix, String apiKey, @Nullable String userId) {
         if (context == null) throw new IllegalArgumentException("context == null");
         this.appContext = context.getApplicationContext();
         this.apiKey = safeTrim(apiKey);
+        this.apiPrefix = normalizeApiPrefix(apiPrefix);
         String b = normalizeBaseUrl(baseUrl);
         this.baseUrl = b.isEmpty() ? null : HttpUrl.parse(b);
+        this.userId = safeTrim(userId);
     }
 
     public boolean isConfigured() {
@@ -170,7 +173,9 @@ public final class EmbyClient {
         String p = safeTrim(path);
         if (p.startsWith("/")) p = p.substring(1);
         HttpUrl.Builder b = baseUrl.newBuilder();
-        b.addPathSegment("emby");
+        if (!apiPrefix.isEmpty()) {
+            b.addPathSegments(apiPrefix);
+        }
         if (!p.isEmpty()) b.addPathSegments(p);
         if (!apiKey.isEmpty()) b.addQueryParameter("api_key", apiKey);
         return b;
@@ -178,7 +183,11 @@ public final class EmbyClient {
 
     private JSONObject getJsonObject(HttpUrl url) throws IOException, JSONException {
         OkHttpClient client = NetworkClients.okHttp(appContext);
-        Request req = new Request.Builder().url(url).get().header("Accept", "application/json").build();
+        Request.Builder rb = new Request.Builder().url(url).get().header("Accept", "application/json");
+        if (!apiKey.isEmpty()) {
+            rb.header("X-Emby-Token", apiKey);
+        }
+        Request req = rb.build();
         try (Response resp = client.newCall(req).execute()) {
             if (!resp.isSuccessful()) {
                 throw new IOException("HTTP " + resp.code() + " " + resp.message());
@@ -255,10 +264,6 @@ public final class EmbyClient {
 
     private static String normalizeBaseUrl(String baseUrl) {
         String b = EmbyApi.normalizeBaseUrl(baseUrl);
-        String lower = b.toLowerCase(Locale.US);
-        if (lower.endsWith("/emby")) {
-            b = b.substring(0, b.length() - "/emby".length());
-        }
         while (b.endsWith("/")) b = b.substring(0, b.length() - 1);
         return b;
     }
@@ -266,5 +271,11 @@ public final class EmbyClient {
     private static String safeTrim(String s) {
         return s != null ? s.trim() : "";
     }
-}
 
+    private static String normalizeApiPrefix(String prefix) {
+        String p = safeTrim(prefix);
+        while (p.startsWith("/")) p = p.substring(1);
+        while (p.endsWith("/")) p = p.substring(0, p.length() - 1);
+        return p;
+    }
+}
