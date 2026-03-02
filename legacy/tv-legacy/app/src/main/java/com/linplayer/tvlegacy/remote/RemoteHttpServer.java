@@ -209,7 +209,7 @@ final class RemoteHttpServer {
                 JSONObject resp = new JSONObject();
                 resp.put("ok", true);
                 JSONObject app = new JSONObject();
-                app.put("name", "LinPlayer TV Legacy");
+                app.put("name", appContext.getString(R.string.app_name));
                 app.put("version", BuildConfig.VERSION_NAME);
                 resp.put("app", app);
 

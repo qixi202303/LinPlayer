@@ -5,6 +5,7 @@ import android.provider.Settings;
 import androidx.annotation.Nullable;
 import com.linplayer.tvlegacy.BuildConfig;
 import com.linplayer.tvlegacy.NetworkClients;
+import com.linplayer.tvlegacy.R;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -335,7 +336,7 @@ public final class EmbyApi {
     private static String authorizationValue(
             Context context, boolean jellyfin, @Nullable String token, @Nullable String userId) {
         String deviceId = deviceId(context);
-        String client = "LinPlayer TV Legacy";
+        String client = context.getString(R.string.app_name);
         String device = "Android TV";
         String version = BuildConfig.VERSION_NAME;
 

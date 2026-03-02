@@ -135,7 +135,7 @@ public final class ProxyService extends Service {
         Notification n =
                 new NotificationCompat.Builder(this, CHANNEL_ID)
                         .setSmallIcon(android.R.drawable.stat_sys_download_done)
-                        .setContentTitle("LinPlayer TV Legacy")
+                        .setContentTitle(getString(R.string.app_name))
                         .setContentText("Proxy service running")
                         .setOngoing(true)
                         .build();
