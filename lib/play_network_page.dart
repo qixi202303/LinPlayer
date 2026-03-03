@@ -146,7 +146,8 @@ class _PlayNetworkPageState extends State<PlayNetworkPage>
   final FocusNode _tvCoreExoFocusNode =
       FocusNode(debugLabel: 'network_player_tv_core_exo');
 
-  int _tvBottomPanelIndex = 0; // 0=playback, 1=episodes, 2=subtitles, 3=audio, 4=core
+  int _tvBottomPanelIndex =
+      0; // 0=playback, 1=episodes, 2=subtitles, 3=audio, 4=core
   Duration? _resumeHintPosition;
   bool _showResumeHint = false;
   Timer? _resumeHintTimer;
@@ -2287,8 +2288,8 @@ class _PlayNetworkPageState extends State<PlayNetworkPage>
     final sources = _availableMediaSources;
     if (sources.isEmpty) return false;
 
-    final currentMediaSourceId = (_mediaSourceId ?? _selectedMediaSourceId ?? '')
-        .trim();
+    final currentMediaSourceId =
+        (_mediaSourceId ?? _selectedMediaSourceId ?? '').trim();
     if (currentMediaSourceId.isEmpty) return false;
 
     Map<String, dynamic>? ms;
@@ -2357,7 +2358,9 @@ class _PlayNetworkPageState extends State<PlayNetworkPage>
         final titleOk = title.isNotEmpty && tTitle == title;
         final langOk = lang.isNotEmpty && tLang == lang;
         final codecOk = codec.isNotEmpty && tCodec == codec;
-        return titleOk && (lang.isEmpty || langOk) && (codec.isEmpty || codecOk);
+        return titleOk &&
+            (lang.isEmpty || langOk) &&
+            (codec.isEmpty || codecOk);
       });
       if (alreadyLoaded) continue;
 
@@ -2403,8 +2406,8 @@ class _PlayNetworkPageState extends State<PlayNetworkPage>
     final sources = _availableMediaSources;
     if (sources.isEmpty) return null;
 
-    final currentMediaSourceId = (_mediaSourceId ?? _selectedMediaSourceId ?? '')
-        .trim();
+    final currentMediaSourceId =
+        (_mediaSourceId ?? _selectedMediaSourceId ?? '').trim();
     if (currentMediaSourceId.isEmpty) return null;
 
     Map<String, dynamic>? ms;
@@ -2447,7 +2450,9 @@ class _PlayNetworkPageState extends State<PlayNetworkPage>
           trackTitle == streamTitle) {
         score += 3;
       }
-      if (trackLang.isNotEmpty && streamLang.isNotEmpty && trackLang == streamLang) {
+      if (trackLang.isNotEmpty &&
+          streamLang.isNotEmpty &&
+          trackLang == streamLang) {
         score += 2;
       }
       if (trackCodec.isNotEmpty &&
@@ -2537,7 +2542,8 @@ class _PlayNetworkPageState extends State<PlayNetworkPage>
     final prefixPart = fixedPrefix.isEmpty ? '' : '/$fixedPrefix';
 
     final trimmedPath = path.trim();
-    final fixedPath = trimmedPath.startsWith('/') ? trimmedPath : '/$trimmedPath';
+    final fixedPath =
+        trimmedPath.startsWith('/') ? trimmedPath : '/$trimmedPath';
 
     return '$base$prefixPart$fixedPath';
   }
@@ -3016,8 +3022,7 @@ class _PlayNetworkPageState extends State<PlayNetworkPage>
     if (duration <= Duration.zero) return false;
     final durUs = duration.inMicroseconds;
     if (durUs <= 0) return false;
-    final threshold =
-        widget.appState.markPlayedThresholdPercent.clamp(75, 100);
+    final threshold = widget.appState.markPlayedThresholdPercent.clamp(75, 100);
     final posUs = position.inMicroseconds;
     return posUs * 100 >= durUs * threshold;
   }
@@ -3473,7 +3478,8 @@ class _PlayNetworkPageState extends State<PlayNetworkPage>
     final isDownOrRepeat = event is KeyDownEvent || event is KeyRepeatEvent;
     if (isDownOrRepeat && matches(DesktopShortcutAction.volumeUp)) {
       _showControls();
-      _desktopAdjustLevelByKey(target: _DesktopLevelTarget.volume, direction: 1);
+      _desktopAdjustLevelByKey(
+          target: _DesktopLevelTarget.volume, direction: 1);
       return KeyEventResult.handled;
     }
     if (isDownOrRepeat && matches(DesktopShortcutAction.volumeDown)) {
@@ -4022,9 +4028,10 @@ class _PlayNetworkPageState extends State<PlayNetworkPage>
       return const Center(child: Text('暂无可选剧集'));
     }
 
-    final selectedSeasonId = ((_episodeSelectedSeasonId ?? '').trim().isNotEmpty)
-        ? _episodeSelectedSeasonId!.trim()
-        : seasons.first.id;
+    final selectedSeasonId =
+        ((_episodeSelectedSeasonId ?? '').trim().isNotEmpty)
+            ? _episodeSelectedSeasonId!.trim()
+            : seasons.first.id;
     final selectedSeason = seasons.firstWhere(
       (s) => s.id == selectedSeasonId,
       orElse: () => seasons.first,
@@ -4058,7 +4065,8 @@ class _PlayNetworkPageState extends State<PlayNetworkPage>
                 return const Center(child: Text('暂无剧集'));
               }
 
-              final selectedIndex = eps.indexWhere((e) => e.id == widget.itemId);
+              final selectedIndex =
+                  eps.indexWhere((e) => e.id == widget.itemId);
               final focusNode = selectedIndex >= 0
                   ? _tvEpisodeSelectedFocusNode
                   : _tvEpisodeFallbackFocusNode;
@@ -4073,7 +4081,8 @@ class _PlayNetworkPageState extends State<PlayNetworkPage>
                       if (entry.key > 0) const SizedBox(width: 10),
                       _buildTvChip(
                         autofocus: entry.key == autofocusIndex,
-                        focusNode: entry.key == autofocusIndex ? focusNode : null,
+                        focusNode:
+                            entry.key == autofocusIndex ? focusNode : null,
                         selected: entry.value.id == widget.itemId,
                         label: (entry.value.episodeNumber ?? (entry.key + 1))
                             .toString(),
@@ -4274,7 +4283,8 @@ class _PlayNetworkPageState extends State<PlayNetworkPage>
     final padV = (12 * uiScale).clamp(10.0, 16.0);
 
     final durationMs = duration.inMilliseconds;
-    final progress = durationMs <= 0 ? 0.0 : position.inMilliseconds / durationMs;
+    final progress =
+        durationMs <= 0 ? 0.0 : position.inMilliseconds / durationMs;
     final bufferedRatio =
         durationMs <= 0 ? 0.0 : buffered.inMilliseconds / durationMs;
 
@@ -4285,7 +4295,8 @@ class _PlayNetworkPageState extends State<PlayNetworkPage>
     final trackColor = scheme.brightness == Brightness.dark
         ? Colors.white.withValues(alpha: 0.18)
         : Colors.black.withValues(alpha: 0.10);
-    final timeText = '当前观看时长（${_fmtClock(position)}） / 总时长（${_fmtClock(duration)}）';
+    final timeText =
+        '当前观看时长（${_fmtClock(position)}） / 总时长（${_fmtClock(duration)}）';
     final timeStyle = theme.textTheme.labelLarge?.copyWith(
           color: fg,
           fontWeight: FontWeight.w800,
@@ -5193,7 +5204,8 @@ class _PlayNetworkPageState extends State<PlayNetworkPage>
 
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
-        final allowSeek = !widget.isTv || !_controlsVisible || _tvBottomPanelIndex == 0;
+        final allowSeek =
+            !widget.isTv || !_controlsVisible || _tvBottomPanelIndex == 0;
 
         if (allowSeek && key == LogicalKeyboardKey.arrowLeft) {
           // ignore: unawaited_futures
@@ -5424,8 +5436,8 @@ class _PlayNetworkPageState extends State<PlayNetworkPage>
                                           const CircularProgressIndicator(),
                                           if (_bufferingPct != null)
                                             Padding(
-                                              padding:
-                                                  const EdgeInsets.only(top: 12),
+                                              padding: const EdgeInsets.only(
+                                                  top: 12),
                                               child: Text(
                                                 '缓冲中 ${(_bufferingPct! <= 1 ? _bufferingPct! * 100 : _bufferingPct!).clamp(0, 100).toStringAsFixed(0)}%',
                                                 style: const TextStyle(
@@ -5478,9 +5490,8 @@ class _PlayNetworkPageState extends State<PlayNetworkPage>
                                           behavior: HitTestBehavior.translucent,
                                           onTap: _toggleControls,
                                           onDoubleTapDown: controlsEnabled
-                                              ? (d) =>
-                                                  _doubleTapDownPosition =
-                                                      d.localPosition
+                                              ? (d) => _doubleTapDownPosition =
+                                                  d.localPosition
                                               : null,
                                           onDoubleTap: controlsEnabled
                                               ? () {
@@ -5493,14 +5504,14 @@ class _PlayNetworkPageState extends State<PlayNetworkPage>
                                               : null,
                                           onHorizontalDragStart:
                                               (controlsEnabled &&
-                                                      widget.appState
-                                                          .gestureSeek)
+                                                      widget
+                                                          .appState.gestureSeek)
                                                   ? _onSeekDragStart
                                                   : null,
                                           onHorizontalDragUpdate:
                                               (controlsEnabled &&
-                                                      widget.appState
-                                                          .gestureSeek)
+                                                      widget
+                                                          .appState.gestureSeek)
                                                   ? (d) => _onSeekDragUpdate(
                                                         d,
                                                         width: w,
@@ -5509,8 +5520,8 @@ class _PlayNetworkPageState extends State<PlayNetworkPage>
                                                   : null,
                                           onHorizontalDragEnd:
                                               (controlsEnabled &&
-                                                      widget.appState
-                                                          .gestureSeek)
+                                                      widget
+                                                          .appState.gestureSeek)
                                                   ? _onSeekDragEnd
                                                   : null,
                                           onVerticalDragStart:
@@ -5525,26 +5536,27 @@ class _PlayNetworkPageState extends State<PlayNetworkPage>
                                                   ? (d) => _onSideDragUpdate(d,
                                                       height: h)
                                                   : null,
-                                          onVerticalDragEnd:
-                                              (controlsEnabled &&
-                                                      sideDragEnabled)
-                                                  ? _onSideDragEnd
-                                                  : null,
+                                          onVerticalDragEnd: (controlsEnabled &&
+                                                  sideDragEnabled)
+                                              ? _onSideDragEnd
+                                              : null,
                                           onLongPressStart: (controlsEnabled &&
                                                   widget.appState
                                                       .gestureLongPressSpeed)
                                               ? _onLongPressStart
                                               : null,
-                                          onLongPressMoveUpdate: (controlsEnabled &&
-                                                  widget.appState
-                                                      .gestureLongPressSpeed &&
-                                                  widget.appState
-                                                      .longPressSlideSpeed)
-                                              ? (d) => _onLongPressMoveUpdate(
-                                                    d,
-                                                    height: h,
-                                                  )
-                                              : null,
+                                          onLongPressMoveUpdate:
+                                              (controlsEnabled &&
+                                                      widget.appState
+                                                          .gestureLongPressSpeed &&
+                                                      widget.appState
+                                                          .longPressSlideSpeed)
+                                                  ? (d) =>
+                                                      _onLongPressMoveUpdate(
+                                                        d,
+                                                        height: h,
+                                                      )
+                                                  : null,
                                           onLongPressEnd: (controlsEnabled &&
                                                   widget.appState
                                                       .gestureLongPressSpeed)
@@ -5861,8 +5873,8 @@ class _PlayNetworkPageState extends State<PlayNetworkPage>
                                         curve: Curves.easeOutCubic,
                                         child: AnimatedOpacity(
                                           opacity: _controlsVisible ? 1 : 0,
-                                          duration: const Duration(
-                                              milliseconds: 160),
+                                          duration:
+                                              const Duration(milliseconds: 160),
                                           curve: Curves.easeOut,
                                           child: IgnorePointer(
                                             ignoring: !_controlsVisible,
@@ -5887,8 +5899,8 @@ class _PlayNetworkPageState extends State<PlayNetworkPage>
                                         curve: Curves.easeOutCubic,
                                         child: AnimatedOpacity(
                                           opacity: _controlsVisible ? 1 : 0,
-                                          duration: const Duration(
-                                              milliseconds: 160),
+                                          duration:
+                                              const Duration(milliseconds: 160),
                                           curve: Curves.easeOut,
                                           child: IgnorePointer(
                                             ignoring: !_controlsVisible,
@@ -5926,7 +5938,8 @@ class _PlayNetworkPageState extends State<PlayNetworkPage>
                                         child: IgnorePointer(
                                           ignoring: !_controlsVisible,
                                           child: Listener(
-                                            onPointerDown: (_) => _showControls(),
+                                            onPointerDown: (_) =>
+                                                _showControls(),
                                             child: Focus(
                                               canRequestFocus: false,
                                               onKeyEvent: (node, event) {
@@ -5945,7 +5958,8 @@ class _PlayNetworkPageState extends State<PlayNetworkPage>
                                                     TraversalDirection.down,
                                                   );
                                                   if (moved) {
-                                                    return KeyEventResult.handled;
+                                                    return KeyEventResult
+                                                        .handled;
                                                   }
                                                   _hideControlsForRemote();
                                                   return KeyEventResult.handled;
@@ -5953,134 +5967,135 @@ class _PlayNetworkPageState extends State<PlayNetworkPage>
                                                 return KeyEventResult.ignored;
                                               },
                                               child: PlaybackControls(
-                                              enabled: controlsEnabled,
-                                              playPauseFocusNode:
-                                                  _tvPlayPauseFocusNode,
-                                              position: _lastPosition,
-                                              buffered: _lastBuffer,
-                                              duration: duration,
-                                              isPlaying: isPlaying,
-                                              playbackRate: _playerService
-                                                  .player.state.rate,
-                                              onSetPlaybackRate: (rate) async {
-                                                _showControls();
-                                                if (!_playerService
-                                                    .isInitialized) {
-                                                  return;
-                                                }
-                                                await _playerService.player
-                                                    .setRate(rate);
-                                                if (mounted) setState(() {});
-                                              },
-                                              heatmap: _danmakuHeatmap,
-                                              showHeatmap:
-                                                  _danmakuShowHeatmap &&
-                                                      _danmakuHeatmap
-                                                          .isNotEmpty,
-                                              seekBackwardSeconds:
-                                                  _seekBackSeconds,
-                                              seekForwardSeconds:
-                                                  _seekForwardSeconds,
-                                              showSystemTime: widget.appState
-                                                  .showSystemTimeInControls,
-                                              showBattery: widget.appState
-                                                  .showBatteryInControls,
-                                              showBufferSpeed: widget
-                                                  .appState.showBufferSpeed,
-                                              buffering: _buffering,
-                                              bufferSpeedX: _bufferSpeedX,
-                                              netSpeedBytesPerSecond:
-                                                  _netSpeedBytesPerSecond,
-                                              onRequestThumbnail:
-                                                  _thumbnailer == null
-                                                      ? null
-                                                      : (pos) => _thumbnailer!
-                                                              .getThumbnail(
-                                                            pos,
-                                                          ),
-                                              onOpenEpisodePicker:
-                                                  _canShowEpisodePickerButton
-                                                      ? _toggleEpisodePicker
-                                                      : null,
-                                              onScrubStart: _onScrubStart,
-                                              onScrubEnd: _onScrubEnd,
-                                              onSeek: (pos) async {
-                                                await _playerService.seek(
-                                                  pos,
-                                                  flushBuffer:
-                                                      _flushBufferOnSeek,
-                                                );
-                                                _lastPosition = pos;
-                                                _syncDanmakuCursor(pos);
-                                                _maybeReportPlaybackProgress(
-                                                  pos,
-                                                  force: true,
-                                                );
-                                                if (mounted) setState(() {});
-                                              },
-                                              onPlay: () {
-                                                _showControls();
-                                                return _playerService.play();
-                                              },
-                                              onPause: () {
-                                                _showControls();
-                                                return _playerService.pause();
-                                              },
-                                              onSeekBackward: () async {
-                                                _showControls();
-                                                final target = _lastPosition -
-                                                    Duration(
-                                                        seconds:
-                                                            _seekBackSeconds);
-                                                final pos =
-                                                    target < Duration.zero
-                                                        ? Duration.zero
-                                                        : target;
-                                                await _playerService.seek(
-                                                  pos,
-                                                  flushBuffer:
-                                                      _flushBufferOnSeek,
-                                                );
-                                                _lastPosition = pos;
-                                                _syncDanmakuCursor(pos);
-                                                _maybeReportPlaybackProgress(
-                                                  pos,
-                                                  force: true,
-                                                );
-                                                if (mounted) setState(() {});
-                                              },
-                                              onSeekForward: () async {
-                                                _showControls();
-                                                final d = duration;
-                                                final target = _lastPosition +
-                                                    Duration(
-                                                        seconds:
-                                                            _seekForwardSeconds);
-                                                final pos =
-                                                    (d > Duration.zero &&
-                                                            target > d)
-                                                        ? d
-                                                        : target;
-                                                await _playerService.seek(
-                                                  pos,
-                                                  flushBuffer:
-                                                      _flushBufferOnSeek,
-                                                );
-                                                _lastPosition = pos;
-                                                _syncDanmakuCursor(pos);
-                                                _maybeReportPlaybackProgress(
-                                                  pos,
-                                                  force: true,
-                                                );
-                                                if (mounted) setState(() {});
-                                              },
+                                                enabled: controlsEnabled,
+                                                playPauseFocusNode:
+                                                    _tvPlayPauseFocusNode,
+                                                position: _lastPosition,
+                                                buffered: _lastBuffer,
+                                                duration: duration,
+                                                isPlaying: isPlaying,
+                                                playbackRate: _playerService
+                                                    .player.state.rate,
+                                                onSetPlaybackRate:
+                                                    (rate) async {
+                                                  _showControls();
+                                                  if (!_playerService
+                                                      .isInitialized) {
+                                                    return;
+                                                  }
+                                                  await _playerService.player
+                                                      .setRate(rate);
+                                                  if (mounted) setState(() {});
+                                                },
+                                                heatmap: _danmakuHeatmap,
+                                                showHeatmap:
+                                                    _danmakuShowHeatmap &&
+                                                        _danmakuHeatmap
+                                                            .isNotEmpty,
+                                                seekBackwardSeconds:
+                                                    _seekBackSeconds,
+                                                seekForwardSeconds:
+                                                    _seekForwardSeconds,
+                                                showSystemTime: widget.appState
+                                                    .showSystemTimeInControls,
+                                                showBattery: widget.appState
+                                                    .showBatteryInControls,
+                                                showBufferSpeed: widget
+                                                    .appState.showBufferSpeed,
+                                                buffering: _buffering,
+                                                bufferSpeedX: _bufferSpeedX,
+                                                netSpeedBytesPerSecond:
+                                                    _netSpeedBytesPerSecond,
+                                                onRequestThumbnail:
+                                                    _thumbnailer == null
+                                                        ? null
+                                                        : (pos) => _thumbnailer!
+                                                                .getThumbnail(
+                                                              pos,
+                                                            ),
+                                                onOpenEpisodePicker:
+                                                    _canShowEpisodePickerButton
+                                                        ? _toggleEpisodePicker
+                                                        : null,
+                                                onScrubStart: _onScrubStart,
+                                                onScrubEnd: _onScrubEnd,
+                                                onSeek: (pos) async {
+                                                  await _playerService.seek(
+                                                    pos,
+                                                    flushBuffer:
+                                                        _flushBufferOnSeek,
+                                                  );
+                                                  _lastPosition = pos;
+                                                  _syncDanmakuCursor(pos);
+                                                  _maybeReportPlaybackProgress(
+                                                    pos,
+                                                    force: true,
+                                                  );
+                                                  if (mounted) setState(() {});
+                                                },
+                                                onPlay: () {
+                                                  _showControls();
+                                                  return _playerService.play();
+                                                },
+                                                onPause: () {
+                                                  _showControls();
+                                                  return _playerService.pause();
+                                                },
+                                                onSeekBackward: () async {
+                                                  _showControls();
+                                                  final target = _lastPosition -
+                                                      Duration(
+                                                          seconds:
+                                                              _seekBackSeconds);
+                                                  final pos =
+                                                      target < Duration.zero
+                                                          ? Duration.zero
+                                                          : target;
+                                                  await _playerService.seek(
+                                                    pos,
+                                                    flushBuffer:
+                                                        _flushBufferOnSeek,
+                                                  );
+                                                  _lastPosition = pos;
+                                                  _syncDanmakuCursor(pos);
+                                                  _maybeReportPlaybackProgress(
+                                                    pos,
+                                                    force: true,
+                                                  );
+                                                  if (mounted) setState(() {});
+                                                },
+                                                onSeekForward: () async {
+                                                  _showControls();
+                                                  final d = duration;
+                                                  final target = _lastPosition +
+                                                      Duration(
+                                                          seconds:
+                                                              _seekForwardSeconds);
+                                                  final pos =
+                                                      (d > Duration.zero &&
+                                                              target > d)
+                                                          ? d
+                                                          : target;
+                                                  await _playerService.seek(
+                                                    pos,
+                                                    flushBuffer:
+                                                        _flushBufferOnSeek,
+                                                  );
+                                                  _lastPosition = pos;
+                                                  _syncDanmakuCursor(pos);
+                                                  _maybeReportPlaybackProgress(
+                                                    pos,
+                                                    force: true,
+                                                  );
+                                                  if (mounted) setState(() {});
+                                                },
+                                              ),
                                             ),
                                           ),
                                         ),
                                       ),
                                     ),
                                   ),
-                                ),
                                 if (!widget.isTv)
                                   _buildEpisodePickerOverlay(
                                       enableBlur: enableBlur),
@@ -6925,8 +6940,7 @@ class _PlayNetworkPageState extends State<PlayNetworkPage>
                           behavior: HitTestBehavior.translucent,
                           onTap: _toggleControls,
                           onDoubleTapDown: controlsEnabled
-                              ? (d) =>
-                                  _doubleTapDownPosition = d.localPosition
+                              ? (d) => _doubleTapDownPosition = d.localPosition
                               : null,
                           onDoubleTap: controlsEnabled
                               ? () {
@@ -7267,7 +7281,8 @@ class _PlayNetworkPageState extends State<PlayNetworkPage>
                       label: '字幕选择',
                       active: _desktopSidePanel == _DesktopSidePanel.subtitle,
                       onTap: controlsEnabled
-                          ? () => _toggleDesktopPanel(_DesktopSidePanel.subtitle)
+                          ? () =>
+                              _toggleDesktopPanel(_DesktopSidePanel.subtitle)
                           : null,
                     ),
                     const SizedBox(width: 8),
@@ -7512,7 +7527,8 @@ class _PlayNetworkPageState extends State<PlayNetworkPage>
                   ? null
                   : () {
                       setState(() {
-                        _desktopRouteEntriesFuture = _resolveDesktopRouteEntries(
+                        _desktopRouteEntriesFuture =
+                            _resolveDesktopRouteEntries(
                           forceRefresh: true,
                         );
                       });
@@ -7548,8 +7564,7 @@ class _PlayNetworkPageState extends State<PlayNetworkPage>
                     final d = entry.domain;
                     final selected =
                         currentUrl.isNotEmpty && currentUrl == d.url.trim();
-                    final name =
-                        d.name.trim().isEmpty ? d.url : d.name.trim();
+                    final name = d.name.trim().isEmpty ? d.url : d.name.trim();
                     final remark = (_playbackDomainRemark(d.url) ?? '').trim();
 
                     return ListTile(
@@ -8636,116 +8651,111 @@ class _PlayNetworkPageState extends State<PlayNetworkPage>
                 ],
               ),
             ),
-          if (_desktopSpeedPanelVisible) ...[
-            const SizedBox(height: 8),
-            Align(
-              alignment: Alignment.centerRight,
-              child: Container(
-                width: 290,
-                padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? Colors.white.withValues(alpha: 0.06)
-                      : Colors.black.withValues(alpha: 0.04),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: panelBorder),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Text(
-                          '倍速',
-                          style: Theme.of(context)
-                              .textTheme
-                              .labelMedium
-                              ?.copyWith(
-                                color: secondaryIconColor,
-                                fontWeight: FontWeight.w600,
-                              ),
-                        ),
-                        const Spacer(),
-                        Text(
-                          speedHint,
-                          style: Theme.of(context)
-                              .textTheme
-                              .labelMedium
-                              ?.copyWith(
-                                color: iconColor,
-                                fontWeight: FontWeight.w700,
-                              ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        for (final option in const <double>[
-                          0.1,
-                          0.25,
-                          0.5,
-                          0.75,
-                          1,
-                          1.25,
-                          1.5,
-                          1.75,
-                          2,
-                          3,
-                          5,
-                        ])
-                          OutlinedButton(
-                            style: OutlinedButton.styleFrom(
-                              visualDensity: VisualDensity.compact,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 8,
-                              ),
-                              backgroundColor:
-                                  (rate - option).abs() < 0.01
-                                      ? (isDark
-                                          ? Colors.white
-                                              .withValues(alpha: 0.20)
-                                          : Theme.of(context)
-                                              .colorScheme
-                                              .primary
-                                              .withValues(alpha: 0.10))
-                                      : (isDark
-                                          ? Colors.white
-                                              .withValues(alpha: 0.08)
-                                          : Colors.white
-                                              .withValues(alpha: 0.92)),
-                              foregroundColor:
-                                  (rate - option).abs() < 0.01
-                                      ? iconColor
-                                      : secondaryIconColor,
-                              side: BorderSide(
-                                color: (rate - option).abs() < 0.01
-                                    ? Theme.of(context).colorScheme.primary
-                                    : panelBorder,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                            ),
-                            onPressed: !controlsEnabled
-                                ? null
-                                : () {
-                                    // ignore: unawaited_futures
-                                    _playerService.player.setRate(option);
-                                    setState(() {});
-                                  },
-                            child: Text('${_fmtRate(option)}x'),
+            if (_desktopSpeedPanelVisible) ...[
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerRight,
+                child: Container(
+                  width: 290,
+                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.06)
+                        : Colors.black.withValues(alpha: 0.04),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: panelBorder),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            '倍速',
+                            style: Theme.of(context)
+                                .textTheme
+                                .labelMedium
+                                ?.copyWith(
+                                  color: secondaryIconColor,
+                                  fontWeight: FontWeight.w600,
+                                ),
                           ),
-                      ],
-                    ),
-                  ],
+                          const Spacer(),
+                          Text(
+                            speedHint,
+                            style: Theme.of(context)
+                                .textTheme
+                                .labelMedium
+                                ?.copyWith(
+                                  color: iconColor,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          for (final option in const <double>[
+                            0.1,
+                            0.25,
+                            0.5,
+                            0.75,
+                            1,
+                            1.25,
+                            1.5,
+                            1.75,
+                            2,
+                            3,
+                            5,
+                          ])
+                            OutlinedButton(
+                              style: OutlinedButton.styleFrom(
+                                visualDensity: VisualDensity.compact,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 8,
+                                ),
+                                backgroundColor: (rate - option).abs() < 0.01
+                                    ? (isDark
+                                        ? Colors.white.withValues(alpha: 0.20)
+                                        : Theme.of(context)
+                                            .colorScheme
+                                            .primary
+                                            .withValues(alpha: 0.10))
+                                    : (isDark
+                                        ? Colors.white.withValues(alpha: 0.08)
+                                        : Colors.white.withValues(alpha: 0.92)),
+                                foregroundColor: (rate - option).abs() < 0.01
+                                    ? iconColor
+                                    : secondaryIconColor,
+                                side: BorderSide(
+                                  color: (rate - option).abs() < 0.01
+                                      ? Theme.of(context).colorScheme.primary
+                                      : panelBorder,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                              onPressed: !controlsEnabled
+                                  ? null
+                                  : () {
+                                      // ignore: unawaited_futures
+                                      _playerService.player.setRate(option);
+                                      setState(() {});
+                                    },
+                              child: Text('${_fmtRate(option)}x'),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
             const SizedBox(height: 8),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
@@ -8983,7 +8993,8 @@ class _PlayNetworkPageState extends State<PlayNetworkPage>
           cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
           child: Listener(
             behavior: HitTestBehavior.translucent,
-            onPointerDown: enabled ? (_) => _setDesktopLevelTarget(target) : null,
+            onPointerDown:
+                enabled ? (_) => _setDesktopLevelTarget(target) : null,
             child: Row(
               children: [
                 Icon(icon, size: 16, color: iconColor),
