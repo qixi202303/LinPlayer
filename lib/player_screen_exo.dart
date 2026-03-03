@@ -13,7 +13,8 @@ import 'package:lin_player_state/lin_player_state.dart';
 import 'package:lin_player_ui/lin_player_ui.dart';
 import 'package:video_player/video_player.dart';
 import 'package:video_player_android/exo_tracks.dart' as vp_android;
-import 'package:video_player_platform_interface/video_player_platform_interface.dart';
+import 'package:video_player_platform_interface/video_player_platform_interface.dart'
+    as vp_platform;
 
 import 'services/app_route_observer.dart';
 import 'widgets/danmaku_manual_search_dialog.dart';
@@ -1277,7 +1278,7 @@ class _ExoPlayerScreenState extends State<ExoPlayerScreen>
       ..showSnackBar(SnackBar(content: Text('Exo 内核暂不支持：$feature')));
   }
 
-  String _audioTrackTitle(VideoAudioTrack t) {
+  String _audioTrackTitle(vp_platform.VideoAudioTrack t) {
     final label = (t.label ?? '').trim();
     if (label.isNotEmpty) return label;
     final lang = (t.language ?? '').trim();
@@ -1285,7 +1286,7 @@ class _ExoPlayerScreenState extends State<ExoPlayerScreen>
     return '音轨 ${t.id}';
   }
 
-  String _audioTrackSubtitle(VideoAudioTrack t) {
+  String _audioTrackSubtitle(vp_platform.VideoAudioTrack t) {
     final parts = <String>[];
     final codec = (t.codec ?? '').trim();
     if (codec.isNotEmpty) parts.add(codec);
@@ -1308,13 +1309,13 @@ class _ExoPlayerScreenState extends State<ExoPlayerScreen>
     // ignore: invalid_use_of_visible_for_testing_member
     final playerId = controller.playerId;
 
-    final platform = VideoPlayerPlatform.instance;
+    final platform = vp_platform.VideoPlayerPlatform.instance;
     if (!platform.isAudioTrackSupportAvailable()) {
       _showNotSupported('音轨切换');
       return;
     }
 
-    late final List<VideoAudioTrack> tracks;
+    late final List<vp_platform.VideoAudioTrack> tracks;
     try {
       tracks = await platform.getAudioTracks(playerId);
     } catch (e) {

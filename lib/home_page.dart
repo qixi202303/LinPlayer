@@ -22,6 +22,7 @@ import 'server_adapters/server_access.dart';
 import 'services/app_route_observer.dart';
 import 'show_detail_page.dart';
 import 'tv/tv_bangumi_page.dart';
+import 'tv/tv_imdb_page.dart';
 import 'tv/tv_tmdb_page.dart';
 
 class HomePage extends StatefulWidget {
@@ -535,7 +536,7 @@ class _HomePageState extends State<HomePage> {
             ),
             TvTmdbPage(appState: widget.appState),
             TvBangumiPage(appState: widget.appState),
-            const _TvPlaceholderPage(title: 'Imdb'),
+            TvImdbPage(appState: widget.appState),
             const _TvPlaceholderPage(title: 'Bilibili'),
           ];
 
@@ -1030,7 +1031,7 @@ class _TvHomeTabBar extends StatelessWidget {
           const SizedBox(width: 10),
           button(index: 2, label: 'Bangumi'),
           const SizedBox(width: 10),
-          button(index: 3, label: 'Imdb'),
+          button(index: 3, label: 'IMDb'),
           const SizedBox(width: 10),
           button(index: 4, label: 'Bilibili'),
         ],

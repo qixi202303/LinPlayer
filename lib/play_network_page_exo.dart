@@ -14,7 +14,8 @@ import 'package:lin_player_ui/lin_player_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player/video_player.dart';
 import 'package:video_player_android/exo_tracks.dart' as vp_android;
-import 'package:video_player_platform_interface/video_player_platform_interface.dart';
+import 'package:video_player_platform_interface/video_player_platform_interface.dart'
+    as vp_platform;
 
 import 'play_network_page.dart';
 import 'server_adapters/server_access.dart';
@@ -159,7 +160,7 @@ class _ExoPlayNetworkPageState extends State<ExoPlayNetworkPage>
 
   bool _tvAudioTracksLoading = false;
   String? _tvAudioTracksError;
-  List<VideoAudioTrack> _tvAudioTracks = const [];
+  List<vp_platform.VideoAudioTrack> _tvAudioTracks = const [];
 
   VideoViewType _viewType = VideoViewType.platformView;
   bool _switchingViewType = false;
@@ -2132,10 +2133,10 @@ class _ExoPlayNetworkPageState extends State<ExoPlayNetworkPage>
     final controller = _controller;
     if (controller == null || !controller.value.isInitialized) return;
 
-    final platform = VideoPlayerPlatform.instance;
+    final platform = vp_platform.VideoPlayerPlatform.instance;
     if (!platform.isAudioTrackSupportAvailable()) {
       setState(() {
-        _tvAudioTracks = const <VideoAudioTrack>[];
+        _tvAudioTracks = const <vp_platform.VideoAudioTrack>[];
         _tvAudioTracksError = '当前内核不支持音轨切换';
       });
       return;
@@ -2154,7 +2155,7 @@ class _ExoPlayNetworkPageState extends State<ExoPlayNetworkPage>
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _tvAudioTracks = const <VideoAudioTrack>[];
+        _tvAudioTracks = const <vp_platform.VideoAudioTrack>[];
         _tvAudioTracksError = '获取音轨失败';
       });
     } finally {
@@ -2164,11 +2165,11 @@ class _ExoPlayNetworkPageState extends State<ExoPlayNetworkPage>
     }
   }
 
-  Future<void> _tvSelectAudioTrack(VideoAudioTrack track) async {
+  Future<void> _tvSelectAudioTrack(vp_platform.VideoAudioTrack track) async {
     final controller = _controller;
     if (controller == null || !controller.value.isInitialized) return;
 
-    final platform = VideoPlayerPlatform.instance;
+    final platform = vp_platform.VideoPlayerPlatform.instance;
     if (!platform.isAudioTrackSupportAvailable()) return;
 
     try {
@@ -4302,7 +4303,7 @@ class _ExoPlayNetworkPageState extends State<ExoPlayNetworkPage>
       );
   }
 
-  String _audioTrackTitle(VideoAudioTrack t) {
+  String _audioTrackTitle(vp_platform.VideoAudioTrack t) {
     final label = (t.label ?? '').trim();
     if (label.isNotEmpty) return label;
     final lang = (t.language ?? '').trim();
@@ -4310,7 +4311,7 @@ class _ExoPlayNetworkPageState extends State<ExoPlayNetworkPage>
     return '音轨 ${t.id}';
   }
 
-  String _audioTrackSubtitle(VideoAudioTrack t) {
+  String _audioTrackSubtitle(vp_platform.VideoAudioTrack t) {
     final parts = <String>[];
     final codec = (t.codec ?? '').trim();
     if (codec.isNotEmpty) parts.add(codec);
@@ -4333,13 +4334,13 @@ class _ExoPlayNetworkPageState extends State<ExoPlayNetworkPage>
     // ignore: invalid_use_of_visible_for_testing_member
     final playerId = controller.playerId;
 
-    final platform = VideoPlayerPlatform.instance;
+    final platform = vp_platform.VideoPlayerPlatform.instance;
     if (!platform.isAudioTrackSupportAvailable()) {
       _showNotSupported('音轨切换');
       return;
     }
 
-    late final List<VideoAudioTrack> tracks;
+    late final List<vp_platform.VideoAudioTrack> tracks;
     try {
       tracks = await platform.getAudioTracks(playerId);
     } catch (e) {
