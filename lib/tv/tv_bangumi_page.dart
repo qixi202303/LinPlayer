@@ -176,7 +176,8 @@ class _TvBangumiPageState extends State<TvBangumiPage> {
           ),
           onOpen: () => Navigator.of(context).push(
             MaterialPageRoute(
-              builder: (_) => TvBangumiRankingPage(appState: widget.appState,
+              builder: (_) => TvBangumiRankingPage(
+                appState: widget.appState,
                 title: '评分排行榜',
                 sort: BangumiSubjectSort.score,
               ),
@@ -196,7 +197,8 @@ class _TvBangumiPageState extends State<TvBangumiPage> {
           ),
           onOpen: () => Navigator.of(context).push(
             MaterialPageRoute(
-              builder: (_) => TvBangumiRankingPage(appState: widget.appState,
+              builder: (_) => TvBangumiRankingPage(
+                appState: widget.appState,
                 title: '排名排行榜',
                 sort: BangumiSubjectSort.rank,
               ),
@@ -430,8 +432,8 @@ class _BangumiPosterCard extends StatelessWidget {
             placeholderFadeInDuration: Duration.zero,
           );
 
-    final score = subject.rating?.score;
-    final rank = subject.rank;
+    final score = subject.effectiveScore;
+    final rank = subject.effectiveRank;
 
     final metaStyle = theme.textTheme.labelSmall?.copyWith(
       color: scheme.onSurfaceVariant,
@@ -629,26 +631,91 @@ class TvBangumiRankingPage extends StatefulWidget {
 
 class _TvBangumiRankingPageState extends State<TvBangumiRankingPage> {
   final BangumiApiClient _api = BangumiApiClient();
+  final ScrollController _scrollController = ScrollController();
 
   final List<BangumiSubject> _items = <BangumiSubject>[];
+  final Set<int> _seenIds = <int>{};
   bool _loading = true;
   bool _loadingMore = false;
   bool _noMore = false;
   Object? _error;
   int _offset = 0;
+  int _total = 0;
 
-  static const int _pageSize = 30;
+  static const int _pageSize = 20;
 
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_onScroll);
     unawaited(_load(reset: true));
   }
 
   @override
   void dispose() {
+    _scrollController.dispose();
     _api.close();
     super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    if (_loading || _loadingMore || _noMore) return;
+    if (_error != null) return;
+    final pos = _scrollController.position;
+    if (!pos.hasPixels) return;
+    if (pos.extentAfter > 600) return;
+    unawaited(_load(reset: false));
+  }
+
+  void _sortItems() {
+    switch (widget.sort) {
+      case BangumiSubjectSort.rank:
+        int effRank(BangumiSubject s) {
+          final v = s.effectiveRank;
+          if (v == null || v <= 0) return 1 << 30;
+          return v;
+        }
+
+        double effScore(BangumiSubject s) {
+          final v = s.effectiveScore;
+          if (v == null || v <= 0) return -1;
+          return v;
+        }
+
+        _items.sort((a, b) {
+          final cmp = effRank(a).compareTo(effRank(b));
+          if (cmp != 0) return cmp;
+          final cmp2 = effScore(b).compareTo(effScore(a));
+          if (cmp2 != 0) return cmp2;
+          return a.id.compareTo(b.id);
+        });
+        break;
+      case BangumiSubjectSort.score:
+        double effScore(BangumiSubject s) {
+          final v = s.effectiveScore;
+          if (v == null || v <= 0) return -1;
+          return v;
+        }
+
+        int effRank(BangumiSubject s) {
+          final v = s.effectiveRank;
+          if (v == null || v <= 0) return 1 << 30;
+          return v;
+        }
+
+        _items.sort((a, b) {
+          final cmp = effScore(b).compareTo(effScore(a));
+          if (cmp != 0) return cmp;
+          final cmp2 = effRank(a).compareTo(effRank(b));
+          if (cmp2 != 0) return cmp2;
+          return a.id.compareTo(b.id);
+        });
+        break;
+      case BangumiSubjectSort.heat:
+      case BangumiSubjectSort.match:
+        break;
+    }
   }
 
   Future<void> _load({required bool reset}) async {
@@ -661,23 +728,42 @@ class _TvBangumiRankingPageState extends State<TvBangumiRankingPage> {
         _loading = true;
         _noMore = false;
         _offset = 0;
+        _total = 0;
         _items.clear();
+        _seenIds.clear();
       } else {
         _loadingMore = true;
       }
     });
 
     try {
-      final page = await _api.topAnimeRanking(
+      final resp = await _api.topAnimeRankingResponse(
         sort: widget.sort,
         limit: _pageSize,
         offset: _offset,
       );
+      final page = resp.data;
       if (!mounted) return;
       setState(() {
-        _items.addAll(page);
-        _offset += page.length;
-        if (page.length < _pageSize) _noMore = true;
+        _total = resp.total;
+
+        var added = 0;
+        for (final s in page) {
+          if (!_seenIds.add(s.id)) continue;
+          _items.add(s);
+          added++;
+        }
+
+        final nextOffset = resp.offset + page.length;
+        if (nextOffset <= _offset) {
+          _noMore = true;
+        } else {
+          _offset = nextOffset;
+          if (_total > 0 && _offset >= _total) _noMore = true;
+          if (page.isEmpty || added == 0) _noMore = true;
+        }
+
+        _sortItems();
       });
     } catch (e) {
       if (!mounted) return;
@@ -738,6 +824,7 @@ class _TvBangumiRankingPageState extends State<TvBangumiRankingPage> {
             : (_error != null && _items.isEmpty)
                 ? buildError()
                 : GridView.builder(
+                    controller: _scrollController,
                     gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
                       maxCrossAxisExtent: maxCrossAxisExtent,
                       mainAxisSpacing: 10,
@@ -773,6 +860,13 @@ class _TvBangumiRankingPageState extends State<TvBangumiRankingPage> {
 
                       final subject = _items[index];
                       final position = index + 1;
+                      final rank = subject.effectiveRank;
+                      final badgeNumber =
+                          (widget.sort == BangumiSubjectSort.rank &&
+                                  rank != null &&
+                                  rank > 0)
+                              ? rank
+                              : position;
 
                       return Stack(
                         children: [
@@ -806,7 +900,7 @@ class _TvBangumiRankingPageState extends State<TvBangumiRankingPage> {
                                 ),
                               ),
                               child: Text(
-                                '#$position',
+                                '#$badgeNumber',
                                 style: theme.textTheme.labelSmall?.copyWith(
                                   fontWeight: FontWeight.w900,
                                 ),

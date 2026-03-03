@@ -71,13 +71,21 @@ class BangumiImages {
 }
 
 class BangumiRating {
-  const BangumiRating({this.score});
+  const BangumiRating({
+    this.score,
+    this.rank,
+  });
 
   final double? score;
+  final int? rank;
 
   factory BangumiRating.fromJson(Map<String, dynamic> json) {
     final score = (json['score'] as num?)?.toDouble();
-    return BangumiRating(score: score);
+    final rank = (json['rank'] as num?)?.toInt();
+    return BangumiRating(
+      score: score,
+      rank: rank,
+    );
   }
 }
 
@@ -111,6 +119,20 @@ class BangumiSubject {
   }
 
   String? get imageUrl => images?.best;
+
+  int? get effectiveRank {
+    final root = rank;
+    if (root != null && root > 0) return root;
+    final r = rating?.rank;
+    if (r != null && r > 0) return r;
+    return null;
+  }
+
+  double? get effectiveScore {
+    final s = rating?.score;
+    if (s == null || s <= 0) return null;
+    return s;
+  }
 
   factory BangumiSubject.fromJson(Map<String, dynamic> json) {
     final imagesRaw = json['images'];
@@ -300,8 +322,23 @@ class BangumiApiClient {
     int offset = 0,
     bool japanOnly = true,
   }) async {
+    final resp = await topAnimeRankingResponse(
+      sort: sort,
+      limit: limit,
+      offset: offset,
+      japanOnly: japanOnly,
+    );
+    return resp.data;
+  }
+
+  Future<BangumiSearchResponse> topAnimeRankingResponse({
+    required BangumiSubjectSort sort,
+    int limit = 10,
+    int offset = 0,
+    bool japanOnly = true,
+  }) async {
     final baseFilter = <String, dynamic>{
-      'type': const [2],
+      'type': 2,
       'nsfw': false,
     };
 
@@ -314,7 +351,7 @@ class BangumiApiClient {
         {
           'tag': const ['日本']
         },
-      const <String, dynamic>{},
+      if (!japanOnly) const <String, dynamic>{},
     ];
 
     Object? lastError;
@@ -327,7 +364,59 @@ class BangumiApiClient {
           offset: offset,
           filter: <String, dynamic>{...baseFilter, ...extra},
         );
-        if (resp.data.isNotEmpty) return resp.data;
+        if (resp.data.isEmpty) continue;
+
+        final items = resp.data.toList(growable: true);
+        switch (sort) {
+          case BangumiSubjectSort.rank:
+            int effRank(BangumiSubject s) {
+              final v = s.effectiveRank;
+              if (v == null || v <= 0) return 1 << 30;
+              return v;
+            }
+
+            double effScore(BangumiSubject s) {
+              final v = s.effectiveScore;
+              if (v == null || v <= 0) return -1;
+              return v;
+            }
+
+            items.sort((a, b) {
+              final cmp = effRank(a).compareTo(effRank(b));
+              if (cmp != 0) return cmp;
+              return effScore(b).compareTo(effScore(a));
+            });
+            break;
+          case BangumiSubjectSort.score:
+            double effScore(BangumiSubject s) {
+              final v = s.effectiveScore;
+              if (v == null || v <= 0) return -1;
+              return v;
+            }
+
+            int effRank(BangumiSubject s) {
+              final v = s.effectiveRank;
+              if (v == null || v <= 0) return 1 << 30;
+              return v;
+            }
+
+            items.sort((a, b) {
+              final cmp = effScore(b).compareTo(effScore(a));
+              if (cmp != 0) return cmp;
+              return effRank(a).compareTo(effRank(b));
+            });
+            break;
+          case BangumiSubjectSort.heat:
+          case BangumiSubjectSort.match:
+            break;
+        }
+
+        return BangumiSearchResponse(
+          total: resp.total,
+          limit: resp.limit,
+          offset: resp.offset,
+          data: items,
+        );
       } catch (e) {
         lastError = e;
       }
@@ -336,6 +425,11 @@ class BangumiApiClient {
       // ignore: only_throw_errors
       throw lastError;
     }
-    return const [];
+    return const BangumiSearchResponse(
+      total: 0,
+      limit: 0,
+      offset: 0,
+      data: <BangumiSubject>[],
+    );
   }
 }

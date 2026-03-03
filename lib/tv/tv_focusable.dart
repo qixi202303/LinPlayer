@@ -7,6 +7,7 @@ class TvFocusable extends StatefulWidget {
     super.key,
     required this.child,
     this.onPressed,
+    this.onFocusChange,
     this.autofocus = false,
     this.focusNode,
     this.enabled = true,
@@ -19,6 +20,7 @@ class TvFocusable extends StatefulWidget {
 
   final Widget child;
   final VoidCallback? onPressed;
+  final ValueChanged<bool>? onFocusChange;
   final bool autofocus;
   final FocusNode? focusNode;
   final bool enabled;
@@ -49,6 +51,7 @@ class _TvFocusableState extends State<TvFocusable> {
     }
     if (_focused == v) return;
     setState(() => _focused = v);
+    widget.onFocusChange?.call(v);
   }
 
   @override
