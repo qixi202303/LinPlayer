@@ -37,9 +37,9 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  // TV: 0 home, 1 aggregate, 2 settings.
-  // Other platforms: 0 home, 1 aggregate, 2 local, 3 settings.
+  // Non-TV: 0 home, 1 aggregate, 2 local, 3 settings.
   int _index = 0;
+  int _tvHomeTabIndex = 0;
   bool _loading = true;
   Future<MediaStats>? _mediaStatsFuture;
 
@@ -523,6 +523,19 @@ class _HomePageState extends State<HomePage> {
                   ? '选择服务器'
                   : AppConfigScope.of(context).displayName);
           final iconUrl = widget.appState.activeServer?.iconUrl;
+          final tvPages = [
+            _HomeBody(
+              appState: widget.appState,
+              loading: _loading,
+              onRefresh: () => _load(forceRefresh: true),
+              isTv: true,
+              showSearchBar: false,
+            ),
+            const _TvPlaceholderPage(title: 'TMDB'),
+            const _TvPlaceholderPage(title: 'Bangumi'),
+            const _TvPlaceholderPage(title: 'Imdb'),
+            const _TvPlaceholderPage(title: 'Bilibili'),
+          ];
 
           return Scaffold(
             body: Column(
@@ -543,28 +556,32 @@ class _HomePageState extends State<HomePage> {
                       ),
                       onTapLibrary: () => Navigator.of(context).push(
                         MaterialPageRoute(
-                          builder: (_) => LibraryPage(appState: widget.appState),
+                          builder: (_) =>
+                              LibraryPage(appState: widget.appState),
                         ),
                       ),
                       onTapSettings: () => Navigator.of(context).push(
                         MaterialPageRoute(
-                          builder: (_) => SettingsPage(appState: widget.appState),
+                          builder: (_) =>
+                              SettingsPage(appState: widget.appState),
                         ),
                       ),
                     ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+                  child: _TvHomeTabBar(
+                    selectedIndex: _tvHomeTabIndex,
+                    onSelected: (i) => setState(() => _tvHomeTabIndex = i),
                   ),
                 ),
                 Expanded(
                   child: MediaQuery.removePadding(
                     context: context,
                     removeTop: true,
-                    child: _HomeBody(
-                      appState: widget.appState,
-                      loading: _loading,
-                      onRefresh: () => _load(forceRefresh: true),
-                      isTv: true,
-                      showSearchBar: false,
-                    ),
+                    child:
+                        IndexedStack(index: _tvHomeTabIndex, children: tvPages),
                   ),
                 ),
               ],
@@ -782,8 +799,8 @@ class _TvFocusableState extends State<_TvFocusable> {
                       spreadRadius: 1.0,
                     ),
                     BoxShadow(
-                      color:
-                          scheme.primary.withValues(alpha: isDark ? 0.22 : 0.16),
+                      color: scheme.primary
+                          .withValues(alpha: isDark ? 0.22 : 0.16),
                       blurRadius: 44,
                       spreadRadius: 0.0,
                     ),
@@ -960,6 +977,87 @@ class _TvHomeTopBar extends StatelessWidget {
           onTap: onTapSettings,
         ),
       ],
+    );
+  }
+}
+
+class _TvHomeTabBar extends StatelessWidget {
+  const _TvHomeTabBar({
+    required this.selectedIndex,
+    required this.onSelected,
+  });
+
+  final int selectedIndex;
+  final ValueChanged<int> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = scheme.brightness == Brightness.dark;
+    final surface =
+        scheme.surfaceContainerHigh.withValues(alpha: isDark ? 0.62 : 0.80);
+    final selectedSurface =
+        scheme.primary.withValues(alpha: isDark ? 0.22 : 0.10);
+
+    Widget button({required int index, required String label}) {
+      final selected = index == selectedIndex;
+      return _TvFocusable(
+        borderRadius: BorderRadius.circular(999),
+        surfaceColor: selected ? selectedSurface : surface,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        onTap: () => onSelected(index),
+        child: Text(
+          label,
+          style: theme.textTheme.labelLarge?.copyWith(
+            fontWeight: FontWeight.w800,
+            color: scheme.onSurface,
+          ),
+        ),
+      );
+    }
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      clipBehavior: Clip.none,
+      child: Row(
+        children: [
+          button(index: 0, label: '首页'),
+          const SizedBox(width: 10),
+          button(index: 1, label: 'TMDB'),
+          const SizedBox(width: 10),
+          button(index: 2, label: 'Bangumi'),
+          const SizedBox(width: 10),
+          button(index: 3, label: 'Imdb'),
+          const SizedBox(width: 10),
+          button(index: 4, label: 'Bilibili'),
+        ],
+      ),
+    );
+  }
+}
+
+class _TvPlaceholderPage extends StatelessWidget {
+  const _TvPlaceholderPage({required this.title});
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Text(
+          '$title 页面占位（开发中）',
+          textAlign: TextAlign.center,
+          style: theme.textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.w700,
+            color: scheme.onSurfaceVariant,
+          ),
+        ),
+      ),
     );
   }
 }
@@ -1839,8 +1937,9 @@ class _ContinueWatchingSectionState extends State<_ContinueWatchingSection>
             final uiScale = context.uiScale;
             final baseWidth = widget.isTv ? (280 * uiScale) : 280.0;
             final visible = (constraints.maxWidth / baseWidth).clamp(1.4, 7.0);
-            final maxCount =
-                widget.isTv ? items.length : (items.length < 12 ? items.length : 12);
+            final maxCount = widget.isTv
+                ? items.length
+                : (items.length < 12 ? items.length : 12);
 
             final itemWidth =
                 (constraints.maxWidth - padding * 2 - spacing * (visible - 1)) /
@@ -1894,9 +1993,10 @@ class _ContinueWatchingSectionState extends State<_ContinueWatchingSection>
                           final item = items[index];
                           final isEpisode =
                               item.type.toLowerCase() == 'episode';
-                          final title = isEpisode && item.seriesName.trim().isNotEmpty
-                              ? item.seriesName.trim()
-                              : item.name;
+                          final title =
+                              isEpisode && item.seriesName.trim().isNotEmpty
+                                  ? item.seriesName.trim()
+                                  : item.name;
                           final pos =
                               _ticksToDuration(item.playbackPositionTicks);
                           final tag = isEpisode ? _episodeTag(item) : '';
@@ -1989,7 +2089,8 @@ class _ContinueWatchingSectionState extends State<_ContinueWatchingSection>
                                       style: (widget.isTv
                                               ? theme.textTheme.bodySmall
                                               : theme.textTheme.bodyMedium)
-                                          ?.copyWith(fontWeight: FontWeight.w700),
+                                          ?.copyWith(
+                                              fontWeight: FontWeight.w700),
                                     ),
                                     if (sub.isNotEmpty)
                                       Padding(
