@@ -22,6 +22,7 @@ import 'server_adapters/server_access.dart';
 import 'services/app_route_observer.dart';
 import 'show_detail_page.dart';
 import 'tv/tv_bangumi_page.dart';
+import 'tv/tv_tmdb_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({
@@ -532,7 +533,7 @@ class _HomePageState extends State<HomePage> {
               isTv: true,
               showSearchBar: false,
             ),
-            const _TvPlaceholderPage(title: 'TMDB'),
+            TvTmdbPage(appState: widget.appState),
             TvBangumiPage(appState: widget.appState),
             const _TvPlaceholderPage(title: 'Imdb'),
             const _TvPlaceholderPage(title: 'Bilibili'),

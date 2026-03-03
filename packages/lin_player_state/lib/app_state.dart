@@ -236,6 +236,7 @@ class AppState extends ChangeNotifier {
   static const _kTvBackgroundOpacityKey = 'tvBackgroundOpacity_v1';
   static const _kTvBackgroundBlurSigmaKey = 'tvBackgroundBlurSigma_v1';
   static const _kEpisodePickerShowTitleKey = 'episodePickerShowTitle_v1';
+  static const _kTmdbApiKeyKey = 'tmdbApiKey_v1';
   // Legacy: migrated to [_kEpisodePickerShowTitleKey].
   static const _kEpisodePickerShowCoverKey = 'episodePickerShowCover_v1';
 
@@ -344,6 +345,7 @@ class AppState extends ChangeNotifier {
   double _tvBackgroundOpacity = 1.0;
   double _tvBackgroundBlurSigma = 0.0;
   bool _episodePickerShowTitle = true;
+  String _tmdbApiKey = '';
   LocalPlaybackHandoff? _localPlaybackHandoff;
   bool _loading = false;
   String? _error;
@@ -825,6 +827,7 @@ class AppState extends ChangeNotifier {
   double get tvBackgroundOpacity => _tvBackgroundOpacity;
   double get tvBackgroundBlurSigma => _tvBackgroundBlurSigma;
   bool get episodePickerShowTitle => _episodePickerShowTitle;
+  String get tmdbApiKey => _tmdbApiKey;
 
   SeriesPlaybackOverride? seriesPlaybackOverride({
     required String serverId,
@@ -1132,6 +1135,7 @@ class AppState extends ChangeNotifier {
     _episodePickerShowTitle = prefs.getBool(_kEpisodePickerShowTitleKey) ??
         prefs.getBool(_kEpisodePickerShowCoverKey) ??
         true;
+    _tmdbApiKey = prefs.getString(_kTmdbApiKeyKey) ?? '';
 
     _seriesPlaybackOverrides.clear();
     final rawSeriesOverrides = prefs.getString(_kSeriesPlaybackOverridesKey);
@@ -1314,6 +1318,7 @@ class AppState extends ChangeNotifier {
         'tv': {
           'remoteEnabled': _tvRemoteEnabled,
           'builtInProxyEnabled': _tvBuiltInProxyEnabled,
+          'tmdbApiKey': _tmdbApiKey,
           'backgroundMode': _tvBackgroundMode.id,
           'backgroundColor': _tvBackgroundColor,
           'backgroundImage': _tvBackgroundImage,
@@ -1765,6 +1770,7 @@ class AppState extends ChangeNotifier {
         _readBool(tvMap['remoteEnabled'], fallback: false);
     final nextTvBuiltInProxyEnabled =
         _readBool(tvMap['builtInProxyEnabled'], fallback: false);
+    final nextTmdbApiKey = (tvMap['tmdbApiKey'] ?? '').toString().trim();
     final nextTvBackgroundMode = tvMap.containsKey('backgroundMode')
         ? tvBackgroundModeFromId(tvMap['backgroundMode']?.toString())
         : TvBackgroundMode.none;
@@ -1891,6 +1897,7 @@ class AppState extends ChangeNotifier {
     _tvRemoteEnabled = nextTvRemoteEnabled;
     _tvRemoteEnabledPreferenceSet = true;
     _tvBuiltInProxyEnabled = nextTvBuiltInProxyEnabled;
+    _tmdbApiKey = nextTmdbApiKey;
     _tvBackgroundMode = nextTvBackgroundMode;
     _tvBackgroundColor = nextTvBackgroundColor;
     _tvBackgroundImage = nextTvBackgroundImage;
@@ -2075,6 +2082,11 @@ class AppState extends ChangeNotifier {
     await _persistDesktopShortcutBindings(prefs);
     await prefs.setBool(_kTvRemoteEnabledKey, _tvRemoteEnabled);
     await prefs.setBool(_kTvBuiltInProxyEnabledKey, _tvBuiltInProxyEnabled);
+    if (_tmdbApiKey.isEmpty) {
+      await prefs.remove(_kTmdbApiKeyKey);
+    } else {
+      await prefs.setString(_kTmdbApiKeyKey, _tmdbApiKey);
+    }
     await prefs.setString(_kTvBackgroundModeKey, _tvBackgroundMode.id);
     await prefs.setInt(_kTvBackgroundColorKey, _tvBackgroundColor);
     await prefs.setString(_kTvBackgroundImageKey, _tvBackgroundImage);
@@ -4899,6 +4911,19 @@ class AppState extends ChangeNotifier {
     _tvBuiltInProxyEnabled = enabled;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_kTvBuiltInProxyEnabledKey, enabled);
+    notifyListeners();
+  }
+
+  Future<void> setTmdbApiKey(String apiKey) async {
+    final v = apiKey.trim();
+    if (_tmdbApiKey == v) return;
+    _tmdbApiKey = v;
+    final prefs = await SharedPreferences.getInstance();
+    if (v.isEmpty) {
+      await prefs.remove(_kTmdbApiKeyKey);
+    } else {
+      await prefs.setString(_kTmdbApiKeyKey, v);
+    }
     notifyListeners();
   }
 

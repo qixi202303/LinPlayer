@@ -1559,6 +1559,66 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
+  static String _maskApiKeyForDisplay(String raw) {
+    final v = raw.trim();
+    if (v.isEmpty) return '';
+    if (v.length <= 8) return '••••••';
+    return '${v.substring(0, 4)}••••${v.substring(v.length - 4)}';
+  }
+
+  Future<void> _editTmdbApiKey(BuildContext context) async {
+    final controller =
+        TextEditingController(text: widget.appState.tmdbApiKey.trim());
+
+    bool obscure = true;
+    final next = await showDialog<String>(
+      context: context,
+      builder: (dctx) => StatefulBuilder(
+        builder: (dctx, setState) => AlertDialog(
+          title: const Text('TMDB API Key / Token'),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            obscureText: obscure,
+            textInputAction: TextInputAction.done,
+            decoration: InputDecoration(
+              hintText: 'v3 API Key / v4 Read Access Token',
+              helperText: '用于 TMDB 榜单（高分/热门）。',
+              suffixIcon: IconButton(
+                tooltip: obscure ? '显示' : '隐藏',
+                icon: Icon(obscure ? Icons.visibility : Icons.visibility_off),
+                onPressed: () => setState(() => obscure = !obscure),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dctx).pop(null),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dctx).pop(controller.text.trim()),
+              child: const Text('保存'),
+            ),
+          ],
+        ),
+      ),
+    );
+    controller.dispose();
+
+    if (next == null) return;
+    await widget.appState.setTmdbApiKey(next);
+    if (!context.mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          next.trim().isEmpty ? '已清除 TMDB API Key' : '已保存 TMDB API Key',
+        ),
+      ),
+    );
+  }
+
   Future<void> _editTvProxySubscriptionUrl(BuildContext context) async {
     if (_tvProxyBusy) return;
 
@@ -1905,6 +1965,30 @@ class _SettingsPageState extends State<SettingsPage> {
                                   ? null
                                   : (v) =>
                                       _setTvBuiltInProxyEnabled(context, v),
+                            ),
+                          ),
+                          const Divider(height: 1),
+                          tvFocusRow(
+                            ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: const Icon(Icons.local_movies_outlined),
+                              title: const Text('TMDB API Key / Token'),
+                              subtitle: Text(
+                                appState.tmdbApiKey.trim().isEmpty
+                                    ? '未设置（用于 TMDB 高分/热门栏目）'
+                                    : '已设置：${_maskApiKeyForDisplay(appState.tmdbApiKey)}',
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              trailing: FilledButton(
+                                onPressed: () => _editTmdbApiKey(context),
+                                child: Text(
+                                  appState.tmdbApiKey.trim().isEmpty
+                                      ? '设置'
+                                      : '编辑',
+                                ),
+                              ),
+                              onTap: () => _editTmdbApiKey(context),
                             ),
                           ),
                           const Divider(height: 1),
