@@ -171,14 +171,13 @@ public final class AppPrefs {
     }
 
     public static String getPlayerCore(Context context) {
-        String v = prefs(context).getString(KEY_PLAYER_CORE, "ijk");
-        String s = v != null ? v.trim().toLowerCase() : "ijk";
-        return ("ijk".equals(s) || "vlc".equals(s)) ? s : "ijk";
+        String v = prefs(context).getString(KEY_PLAYER_CORE, "vlc");
+        String s = v != null ? v.trim().toLowerCase() : "vlc";
+        return "vlc".equals(s) ? s : "vlc";
     }
 
     public static void setPlayerCore(Context context, String coreId) {
-        String v = coreId != null ? coreId.trim().toLowerCase() : "ijk";
-        if (!"ijk".equals(v) && !"vlc".equals(v)) v = "ijk";
-        prefs(context).edit().putString(KEY_PLAYER_CORE, v).apply();
+        // tv-legacy only keeps libVLC playback core.
+        prefs(context).edit().putString(KEY_PLAYER_CORE, "vlc").apply();
     }
 }

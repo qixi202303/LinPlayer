@@ -57,11 +57,6 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:3.12.13")
 
     // Playback cores
-    // ijkplayer
-    implementation("tv.danmaku.ijk.media:ijkplayer-java:0.8.8")
-    implementation("tv.danmaku.ijk.media:ijkplayer-armv7a:0.8.8")
-    implementation("tv.danmaku.ijk.media:ijkplayer-arm64:0.8.8")
-
     // libVLC Android SDK (3.x)
     implementation("org.videolan.android:libvlc-all:3.6.5")
 

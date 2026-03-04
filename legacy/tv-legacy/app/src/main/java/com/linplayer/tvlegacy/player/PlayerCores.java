@@ -8,8 +8,6 @@ public final class PlayerCores {
 
     @NonNull
     public static PlayerCore create(@NonNull Context context, @NonNull PlayerCoreType type) {
-        if (type == PlayerCoreType.VLC) return new VlcPlayerCore(context);
-        return new IjkPlayerCore(context);
+        return new VlcPlayerCore(context);
     }
 }
-

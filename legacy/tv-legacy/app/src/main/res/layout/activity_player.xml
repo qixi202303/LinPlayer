@@ -148,16 +148,6 @@
             android:clipToPadding="false"
             android:padding="12dp"
             android:scrollbars="none" />
-
-        <!-- 4: Core -->
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/panel_core"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:background="@drawable/tv_hud_panel_bg"
-            android:clipToPadding="false"
-            android:padding="12dp"
-            android:scrollbars="none" />
     </ViewAnimator>
 
 </FrameLayout>

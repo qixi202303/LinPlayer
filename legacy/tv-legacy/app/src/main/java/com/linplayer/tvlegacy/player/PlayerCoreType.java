@@ -3,7 +3,6 @@ package com.linplayer.tvlegacy.player;
 import androidx.annotation.NonNull;
 
 public enum PlayerCoreType {
-    IJK("ijk", "IjkPlayer"),
     VLC("vlc", "libVLC");
 
     @NonNull public final String id;
@@ -23,4 +22,3 @@ public enum PlayerCoreType {
         return fallback;
     }
 }
-

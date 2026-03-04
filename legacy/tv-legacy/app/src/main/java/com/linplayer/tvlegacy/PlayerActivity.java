@@ -61,7 +61,7 @@ public final class PlayerActivity extends AppCompatActivity {
     static final String EXTRA_SEASON_NUMBER = "season_number";
     static final String EXTRA_EPISODE_NUMBER = "episode_number";
 
-    private static final int PANEL_COUNT = 5;
+    private static final int PANEL_COUNT = 4;
     private static final int SEEK_MAX = 1000;
 
     private final Handler main = new Handler(Looper.getMainLooper());
@@ -82,10 +82,9 @@ public final class PlayerActivity extends AppCompatActivity {
     @Nullable private RecyclerView episodesList;
     @Nullable private RecyclerView subtitlesList;
     @Nullable private RecyclerView audioList;
-    @Nullable private RecyclerView coreList;
 
     @Nullable private PlayerCore playerCore;
-    @NonNull private PlayerCoreType coreType = PlayerCoreType.IJK;
+    @NonNull private PlayerCoreType coreType = PlayerCoreType.VLC;
 
     private String url = "";
     private String title = "";
@@ -120,7 +119,6 @@ public final class PlayerActivity extends AppCompatActivity {
     @Nullable private ChipAdapter episodesAdapter;
     @Nullable private ChipAdapter subtitlesAdapter;
     @Nullable private ChipAdapter audioAdapter;
-    @Nullable private ChipAdapter coreAdapter;
 
     private final PlayerCore.Listener coreListener =
             new PlayerCore.Listener() {
@@ -175,7 +173,6 @@ public final class PlayerActivity extends AppCompatActivity {
         episodesList = findViewById(R.id.panel_episodes);
         subtitlesList = findViewById(R.id.panel_subtitles);
         audioList = findViewById(R.id.panel_audio);
-        coreList = findViewById(R.id.panel_core);
         setupChipLists();
 
         refreshTitle();
@@ -273,7 +270,6 @@ public final class PlayerActivity extends AppCompatActivity {
         episodesAdapter = new ChipAdapter(this::onEpisodeChipClicked);
         subtitlesAdapter = new ChipAdapter(this::onSubtitleChipClicked);
         audioAdapter = new ChipAdapter(this::onAudioChipClicked);
-        coreAdapter = new ChipAdapter(this::onCoreChipClicked);
 
         if (episodesAdapter != null) {
             setupChipRecycler(episodesList, episodesAdapter, spacingPx);
@@ -286,10 +282,6 @@ public final class PlayerActivity extends AppCompatActivity {
         if (audioAdapter != null) {
             setupChipRecycler(audioList, audioAdapter, spacingPx);
             audioAdapter.setData(Collections.singletonList(new ChipItem("No audio tracks", false, false)));
-        }
-        if (coreAdapter != null) {
-            setupChipRecycler(coreList, coreAdapter, spacingPx);
-            rebuildCorePanel();
         }
     }
 
@@ -306,7 +298,7 @@ public final class PlayerActivity extends AppCompatActivity {
         if (AppPrefs.isProxyEnabled(this)) {
             ProxyService.start(this);
         }
-        coreType = PlayerCoreType.fromId(AppPrefs.getPlayerCore(this), PlayerCoreType.IJK);
+        coreType = PlayerCoreType.VLC;
         switchCore(coreType, startPositionMs, true);
     }
 
@@ -418,9 +410,6 @@ public final class PlayerActivity extends AppCompatActivity {
             focusRecyclerItem(audioList, 0);
             return;
         }
-        if (next == 4) {
-            focusRecyclerItem(coreList, 0);
-        }
     }
 
     private void onEpisodeChipClicked(int position) {
@@ -526,32 +515,6 @@ public final class PlayerActivity extends AppCompatActivity {
                 });
     }
 
-    private void onCoreChipClicked(int position) {
-        PlayerCoreType[] types = PlayerCoreType.values();
-        if (position < 0 || position >= types.length) return;
-        PlayerCoreType next = types[position];
-        if (next == coreType) return;
-
-        long pos = 0L;
-        PlayerCore p = playerCore;
-        if (p != null) pos = Math.max(0L, p.getPositionMs());
-        startPositionMs = pos;
-
-        switchCore(next, pos, true);
-        Toast.makeText(this, "Switched to " + next.displayName, Toast.LENGTH_SHORT).show();
-    }
-
-    private void rebuildCorePanel() {
-        ChipAdapter a = coreAdapter;
-        if (a == null) return;
-
-        List<ChipItem> items = new ArrayList<>();
-        for (PlayerCoreType t : PlayerCoreType.values()) {
-            items.add(new ChipItem(t.displayName, true, t == coreType));
-        }
-        a.setData(items);
-    }
-
     private void switchCore(@NonNull PlayerCoreType nextType, long startPosMs, boolean playWhenReady) {
         ViewGroup container = playerContainer;
         if (container == null) return;
@@ -566,8 +529,6 @@ public final class PlayerActivity extends AppCompatActivity {
         releasePlayerCore(true);
 
         coreType = nextType;
-        AppPrefs.setPlayerCore(this, nextType.id);
-        rebuildCorePanel();
 
         PlayerCore p = PlayerCores.create(this, nextType);
         p.setListener(coreListener);
@@ -980,11 +941,7 @@ public final class PlayerActivity extends AppCompatActivity {
 
         List<ChipItem> items = new ArrayList<>();
         if (subtitleTracks.isEmpty()) {
-            if (coreType == PlayerCoreType.IJK) {
-                items.add(new ChipItem("IjkPlayer: use libVLC for subtitles", false, false));
-            } else {
-                items.add(new ChipItem("No subtitles", false, false));
-            }
+            items.add(new ChipItem("No subtitles", false, false));
         } else {
             items.add(new ChipItem("Off", true, subtitlesOff));
             items.add(new ChipItem("Auto", true, !subtitlesOff && selectedSubtitleId == null));
@@ -1002,11 +959,7 @@ public final class PlayerActivity extends AppCompatActivity {
 
         List<ChipItem> items = new ArrayList<>();
         if (audioTracks.isEmpty()) {
-            if (coreType == PlayerCoreType.IJK) {
-                items.add(new ChipItem("IjkPlayer: use libVLC for tracks", false, false));
-            } else {
-                items.add(new ChipItem("No audio tracks", false, false));
-            }
+            items.add(new ChipItem("No audio tracks", false, false));
         } else {
             items.add(new ChipItem("Auto", true, selectedAudioId == null));
             for (PlayerTrack t : audioTracks) {
