@@ -41,7 +41,7 @@ class _TvBangumiPageState extends State<TvBangumiPage> {
   final BangumiApiClient _api = BangumiApiClient();
 
   late Future<List<BangumiSubject>> _todayAiringFuture;
-  late Future<List<BangumiSubject>> _topScoreFuture;
+  late Future<List<BangumiSubject>> _topHeatFuture;
   late Future<List<BangumiSubject>> _topRankFuture;
 
   @override
@@ -72,8 +72,8 @@ class _TvBangumiPageState extends State<TvBangumiPage> {
   void _reload() {
     setState(() {
       _todayAiringFuture = _loadTodayAiring();
-      _topScoreFuture = _api.topAnimeRanking(
-        sort: BangumiSubjectSort.score,
+      _topHeatFuture = _api.topAnimeRanking(
+        sort: BangumiSubjectSort.heat,
         limit: 10,
       );
       _topRankFuture = _loadTopRank();
@@ -209,9 +209,9 @@ class _TvBangumiPageState extends State<TvBangumiPage> {
         ),
         const SizedBox(height: 20),
         _BangumiSection(
-          title: '评分排行榜',
-          subtitle: '按评分从高到低',
-          future: _topScoreFuture,
+          title: '热度排行榜',
+          subtitle: '按热度从高到低',
+          future: _topHeatFuture,
           onRetry: _reload,
           onTapSubject: (s) => _pushAggregateSearch(
             context,
@@ -222,8 +222,8 @@ class _TvBangumiPageState extends State<TvBangumiPage> {
             MaterialPageRoute(
               builder: (_) => TvBangumiRankingPage(
                 appState: widget.appState,
-                title: '评分排行榜',
-                sort: BangumiSubjectSort.score,
+                title: '热度排行榜',
+                sort: BangumiSubjectSort.heat,
               ),
             ),
           ),
@@ -763,12 +763,13 @@ class _TvBangumiRankingPageState extends State<TvBangumiRankingPage> {
     }
   }
 
-  Future<({
-    List<BangumiSubject> page,
-    List<BangumiSubject> buffer,
-    int total,
-    int nextOffset,
-  })> _fetchJapanRankPage() async {
+  Future<
+      ({
+        List<BangumiSubject> page,
+        List<BangumiSubject> buffer,
+        int total,
+        int nextOffset,
+      })> _fetchJapanRankPage() async {
     final page = <BangumiSubject>[];
     final buffer = List<BangumiSubject>.from(_rankBuffer);
     while (page.length < _pageSize && buffer.isNotEmpty) {

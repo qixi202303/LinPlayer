@@ -29,6 +29,13 @@ void _pushAggregateSearch(
   );
 }
 
+enum TvTmdbListKind {
+  topRatedTv,
+  topRatedMovie,
+  popularTv,
+  popularMovie,
+}
+
 class TvTmdbPage extends StatefulWidget {
   const TvTmdbPage({super.key, required this.appState});
 
@@ -95,6 +102,23 @@ class _TvTmdbPageState extends State<TvTmdbPage> {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => SettingsPage(appState: widget.appState),
+      ),
+    );
+  }
+
+  void _openListing({
+    required TvTmdbListKind kind,
+    required String title,
+    required String subtitle,
+  }) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => TvTmdbListingPage(
+          appState: widget.appState,
+          kind: kind,
+          title: title,
+          subtitle: subtitle,
+        ),
       ),
     );
   }
@@ -176,6 +200,11 @@ class _TvTmdbPageState extends State<TvTmdbPage> {
           subtitle: '按评分从高到低',
           future: _topRatedTvFuture,
           onRetry: _reload,
+          onOpen: () => _openListing(
+            kind: TvTmdbListKind.topRatedTv,
+            title: '高分节目',
+            subtitle: '按评分从高到低',
+          ),
           onTapItem: (m) => _pushAggregateSearch(
             context,
             appState: widget.appState,
@@ -188,6 +217,11 @@ class _TvTmdbPageState extends State<TvTmdbPage> {
           subtitle: '按评分从高到低',
           future: _topRatedMovieFuture,
           onRetry: _reload,
+          onOpen: () => _openListing(
+            kind: TvTmdbListKind.topRatedMovie,
+            title: '高分电影',
+            subtitle: '按评分从高到低',
+          ),
           onTapItem: (m) => _pushAggregateSearch(
             context,
             appState: widget.appState,
@@ -200,6 +234,11 @@ class _TvTmdbPageState extends State<TvTmdbPage> {
           subtitle: '按热度从高到低',
           future: _popularTvFuture,
           onRetry: _reload,
+          onOpen: () => _openListing(
+            kind: TvTmdbListKind.popularTv,
+            title: '热门节目',
+            subtitle: '按热度从高到低',
+          ),
           onTapItem: (m) => _pushAggregateSearch(
             context,
             appState: widget.appState,
@@ -212,6 +251,11 @@ class _TvTmdbPageState extends State<TvTmdbPage> {
           subtitle: '按热度从高到低',
           future: _popularMovieFuture,
           onRetry: _reload,
+          onOpen: () => _openListing(
+            kind: TvTmdbListKind.popularMovie,
+            title: '热门电影',
+            subtitle: '按热度从高到低',
+          ),
           onTapItem: (m) => _pushAggregateSearch(
             context,
             appState: widget.appState,
@@ -230,6 +274,7 @@ class _TmdbSection extends StatelessWidget {
     required this.future,
     required this.onRetry,
     required this.onTapItem,
+    this.onOpen,
   });
 
   final String title;
@@ -237,6 +282,7 @@ class _TmdbSection extends StatelessWidget {
   final Future<List<TmdbMedia>> future;
   final VoidCallback onRetry;
   final ValueChanged<TmdbMedia> onTapItem;
+  final VoidCallback? onOpen;
 
   @override
   Widget build(BuildContext context) {
@@ -269,6 +315,30 @@ class _TmdbSection extends StatelessWidget {
                 ],
               ),
             ),
+            if (onOpen != null)
+              TvFocusable(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                borderRadius: const BorderRadius.all(Radius.circular(999)),
+                onPressed: onOpen,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '详情',
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Icon(
+                      Icons.chevron_right_rounded,
+                      size: (18 * uiScale).clamp(16.0, 20.0),
+                      color: scheme.onSurface,
+                    ),
+                  ],
+                ),
+              ),
           ],
         ),
         const SizedBox(height: 10),
@@ -481,3 +551,299 @@ class _TmdbPosterCard extends StatelessWidget {
   }
 }
 
+class TvTmdbListingPage extends StatefulWidget {
+  const TvTmdbListingPage({
+    super.key,
+    required this.appState,
+    required this.kind,
+    required this.title,
+    required this.subtitle,
+  });
+
+  final AppState appState;
+  final TvTmdbListKind kind;
+  final String title;
+  final String subtitle;
+
+  @override
+  State<TvTmdbListingPage> createState() => _TvTmdbListingPageState();
+}
+
+class _TvTmdbListingPageState extends State<TvTmdbListingPage> {
+  final TmdbApiClient _api = TmdbApiClient();
+  final ScrollController _scrollController = ScrollController();
+
+  final List<TmdbMedia> _items = <TmdbMedia>[];
+  bool _loading = true;
+  bool _loadingMore = false;
+  bool _noMore = false;
+  Object? _error;
+  int _page = 1;
+
+  static const int _pageSizeHint = 20;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onScroll);
+    unawaited(_load(reset: true));
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    _api.close();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    if (_loading || _loadingMore || _noMore) return;
+    if (_error != null) return;
+    final pos = _scrollController.position;
+    if (!pos.hasPixels) return;
+    if (pos.extentAfter > 600) return;
+    unawaited(_load(reset: false));
+  }
+
+  Future<List<TmdbMedia>> _fetchPage({
+    required String apiKey,
+    required int page,
+  }) {
+    return switch (widget.kind) {
+      TvTmdbListKind.topRatedTv => _api.topRatedTv(apiKey: apiKey, page: page),
+      TvTmdbListKind.topRatedMovie =>
+        _api.topRatedMovies(apiKey: apiKey, page: page),
+      TvTmdbListKind.popularTv => _api.popularTv(apiKey: apiKey, page: page),
+      TvTmdbListKind.popularMovie =>
+        _api.popularMovies(apiKey: apiKey, page: page),
+    };
+  }
+
+  void _openSettings() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => SettingsPage(appState: widget.appState),
+      ),
+    );
+  }
+
+  Future<void> _load({required bool reset}) async {
+    if (_loadingMore) return;
+    if (!reset && _noMore) return;
+
+    setState(() {
+      _error = null;
+      if (reset) {
+        _loading = true;
+        _loadingMore = false;
+        _noMore = false;
+        _page = 1;
+        _items.clear();
+      } else {
+        _loadingMore = true;
+      }
+    });
+
+    try {
+      final apiKey = widget.appState.tmdbApiKey.trim();
+      if (apiKey.isEmpty) {
+        throw TmdbApiException('TMDB API key is not set');
+      }
+      if (_page > 500) {
+        setState(() => _noMore = true);
+        return;
+      }
+
+      final currentPage = _page;
+      final pageItems = await _fetchPage(apiKey: apiKey, page: currentPage);
+      if (!mounted) return;
+
+      setState(() {
+        _items.addAll(pageItems);
+
+        final pageSize = pageItems.length;
+        final reachedEnd = pageSize == 0 || pageSize < _pageSizeHint;
+        final reachedLimit = currentPage >= 500;
+        if (reachedEnd || reachedLimit) {
+          _noMore = true;
+        } else {
+          _page = currentPage + 1;
+        }
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = e);
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _loadingMore = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final uiScale = context.uiScale;
+
+    final apiKey = widget.appState.tmdbApiKey.trim();
+    if (apiKey.isEmpty) {
+      return Scaffold(
+        appBar: AppBar(title: Text(widget.title)),
+        body: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '未配置 TMDB API Key / Token',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TvFocusable(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                  borderRadius: const BorderRadius.all(Radius.circular(999)),
+                  onPressed: _openSettings,
+                  child: Text(
+                    '去设置',
+                    style: theme.textTheme.labelLarge?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    Widget buildError() {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '加载失败',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: scheme.onSurfaceVariant,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 12),
+            TvFocusable(
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+              borderRadius: const BorderRadius.all(Radius.circular(999)),
+              onPressed: () => unawaited(_load(reset: true)),
+              child: Text(
+                '重试',
+                style: theme.textTheme.labelLarge?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final maxCrossAxisExtent = (190 * uiScale).clamp(160.0, 220.0);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.title),
+        actions: [
+          IconButton(
+            tooltip: '刷新',
+            onPressed: () => unawaited(_load(reset: true)),
+            icon: const Icon(Icons.refresh_rounded),
+          ),
+        ],
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (widget.subtitle.trim().isNotEmpty) ...[
+              Text(
+                widget.subtitle,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
+            Expanded(
+              child: _loading
+                  ? Center(
+                      child: CircularProgressIndicator(color: scheme.primary))
+                  : (_error != null && _items.isEmpty)
+                      ? buildError()
+                      : GridView.builder(
+                          controller: _scrollController,
+                          gridDelegate:
+                              SliverGridDelegateWithMaxCrossAxisExtent(
+                            maxCrossAxisExtent: maxCrossAxisExtent,
+                            mainAxisSpacing: 10,
+                            crossAxisSpacing: 10,
+                            childAspectRatio: 0.52,
+                          ),
+                          clipBehavior: Clip.none,
+                          itemCount: _items.length + (_noMore ? 0 : 1),
+                          itemBuilder: (context, index) {
+                            final isLoadMoreTile = index >= _items.length;
+                            if (isLoadMoreTile) {
+                              final label = _loadingMore
+                                  ? '加载中…'
+                                  : (_error != null ? '加载失败，重试' : '加载更多');
+                              return TvFocusable(
+                                autofocus: _items.isEmpty,
+                                onPressed: () => unawaited(_load(reset: false)),
+                                child: Center(
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(16),
+                                    child: Text(
+                                      label,
+                                      textAlign: TextAlign.center,
+                                      style:
+                                          theme.textTheme.titleMedium?.copyWith(
+                                        fontWeight: FontWeight.w800,
+                                        color: scheme.onSurfaceVariant,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }
+
+                            final media = _items[index];
+                            final rank = index + 1;
+                            return _TmdbPosterCard(
+                              media: media,
+                              rank: rank,
+                              autofocus: index == 0,
+                              onPressed: () => _pushAggregateSearch(
+                                context,
+                                appState: widget.appState,
+                                query: media.displayTitle,
+                              ),
+                            );
+                          },
+                        ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
