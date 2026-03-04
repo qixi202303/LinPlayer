@@ -46,7 +46,7 @@ class TvTmdbPage extends StatefulWidget {
 }
 
 class _TvTmdbPageState extends State<TvTmdbPage> {
-  final TmdbApiClient _api = TmdbApiClient();
+  final TmdbApiClient _api = TmdbApiClient(preferProxy: true);
 
   late Future<List<TmdbMedia>> _topRatedTvFuture;
   late Future<List<TmdbMedia>> _topRatedMovieFuture;
@@ -467,25 +467,55 @@ class _TmdbPosterCard extends StatelessWidget {
 
     final radius = (14 * uiScale).clamp(10.0, 16.0);
 
-    final imageUrl = media.posterUrl;
-    final imageWidget = imageUrl == null || imageUrl.trim().isEmpty
+    final proxyImageUrl = TmdbImageUrl.posterW500(
+      media.posterPath,
+      imageBaseUrl: kTmdbProxyImageBaseUrl,
+    );
+    final officialImageUrl = TmdbImageUrl.posterW500(
+      media.posterPath,
+      imageBaseUrl: kTmdbOfficialImageBaseUrl,
+    );
+
+    final primaryUrl = proxyImageUrl ?? officialImageUrl;
+    final fallbackUrl =
+        (proxyImageUrl != null && officialImageUrl != null && proxyImageUrl != officialImageUrl)
+            ? officialImageUrl
+            : null;
+
+    const placeholder = ColoredBox(
+      color: Colors.black12,
+      child: Center(child: Icon(Icons.image_outlined)),
+    );
+    const broken = ColoredBox(
+      color: Colors.black26,
+      child: Center(child: Icon(Icons.broken_image_outlined)),
+    );
+
+    final imageWidget = primaryUrl == null || primaryUrl.trim().isEmpty
         ? const ColoredBox(
             color: Colors.black26,
             child: Center(child: Icon(Icons.image_outlined)),
           )
         : CachedNetworkImage(
-            imageUrl: imageUrl,
+            imageUrl: primaryUrl,
             cacheManager: CoverCacheManager.instance,
             httpHeaders: {'User-Agent': LinHttpClientFactory.userAgent},
             fit: BoxFit.cover,
-            placeholder: (_, __) => const ColoredBox(
-              color: Colors.black12,
-              child: Center(child: Icon(Icons.image_outlined)),
-            ),
-            errorWidget: (_, __, ___) => const ColoredBox(
-              color: Colors.black26,
-              child: Center(child: Icon(Icons.broken_image_outlined)),
-            ),
+            placeholder: (_, __) => placeholder,
+            errorWidget: (_, __, ___) => fallbackUrl == null
+                ? broken
+                : CachedNetworkImage(
+                    imageUrl: fallbackUrl,
+                    cacheManager: CoverCacheManager.instance,
+                    httpHeaders: {'User-Agent': LinHttpClientFactory.userAgent},
+                    fit: BoxFit.cover,
+                    placeholder: (_, __) => placeholder,
+                    errorWidget: (_, __, ___) => broken,
+                    useOldImageOnUrlChange: true,
+                    fadeInDuration: Duration.zero,
+                    fadeOutDuration: Duration.zero,
+                    placeholderFadeInDuration: Duration.zero,
+                  ),
             useOldImageOnUrlChange: true,
             fadeInDuration: Duration.zero,
             fadeOutDuration: Duration.zero,
@@ -570,7 +600,7 @@ class TvTmdbListingPage extends StatefulWidget {
 }
 
 class _TvTmdbListingPageState extends State<TvTmdbListingPage> {
-  final TmdbApiClient _api = TmdbApiClient();
+  final TmdbApiClient _api = TmdbApiClient(preferProxy: true);
   final ScrollController _scrollController = ScrollController();
 
   final List<TmdbMedia> _items = <TmdbMedia>[];

@@ -1,10 +1,26 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:http/http.dart' as http;
 import 'package:lin_player_server_api/network/lin_http_client.dart';
 
-const String _kTmdbHost = 'api.themoviedb.org';
-const String _kTmdbImageBase = 'https://image.tmdb.org/t/p/';
+const String kTmdbOfficialHost = 'api.themoviedb.org';
+const String kTmdbOfficialImageBaseUrl = 'https://image.tmdb.org/t/p/';
+
+/// Optional TMDB reverse-proxy endpoint.
+///
+/// Defaults to the proxy site provided by the user. Can be overridden at build
+/// time via `--dart-define`.
+const String kTmdbProxyHost = String.fromEnvironment(
+  'TMDB_PROXY_HOST',
+  defaultValue: 'tmdbproxy.902541.xyz',
+);
+
+/// Must include `/t/p/` so image URLs stay compatible with TMDB paths.
+const String kTmdbProxyImageBaseUrl = String.fromEnvironment(
+  'TMDB_PROXY_IMAGE_BASE_URL',
+  defaultValue: 'https://$kTmdbProxyHost/t/p/',
+);
 
 enum TmdbMediaType { tv, movie }
 
@@ -113,20 +129,35 @@ class TmdbMedia {
 }
 
 class TmdbImageUrl {
-  static String? posterW500(String? posterPath) {
+  static String? posterW500(
+    String? posterPath, {
+    String imageBaseUrl = kTmdbOfficialImageBaseUrl,
+  }) {
     final raw = (posterPath ?? '').trim();
     if (raw.isEmpty) return null;
     if (raw.startsWith('http://') || raw.startsWith('https://')) return raw;
     final fixed = raw.startsWith('/') ? raw : '/$raw';
-    return '${_kTmdbImageBase}w500$fixed';
+    final base = imageBaseUrl.trim().isEmpty
+        ? kTmdbOfficialImageBaseUrl
+        : imageBaseUrl.trim();
+    final normalized = base.endsWith('/') ? base : '$base/';
+    return '${normalized}w500$fixed';
   }
 }
 
 class TmdbApiClient {
-  TmdbApiClient({http.Client? client})
-      : _client = client ?? LinHttpClientFactory.createClient();
+  TmdbApiClient({
+    http.Client? client,
+    this.preferProxy = false,
+    Duration timeout = const Duration(seconds: 8),
+  })  : _client = client ?? LinHttpClientFactory.createClient(),
+        _timeout = timeout <= Duration.zero
+            ? const Duration(seconds: 8)
+            : timeout;
 
   final http.Client _client;
+  final Duration _timeout;
+  final bool preferProxy;
 
   void close() => _client.close();
 
@@ -160,6 +191,15 @@ class TmdbApiClient {
   void _ensureOk(http.Response resp) {
     final code = resp.statusCode;
     if (code < 200 || code >= 300) _throwHttp(resp);
+  }
+
+  bool _isRetryableNetworkError(Object e) {
+    // `http` may wrap IO failures into ClientException; keep it broad but
+    // limited to network-ish errors.
+    if (e is SocketException) return true;
+    if (e is HandshakeException) return true;
+    if (e is http.ClientException) return true;
+    return false;
   }
 
   Future<List<TmdbMedia>> topRatedTv({
@@ -236,9 +276,44 @@ class TmdbApiClient {
       'page': page.clamp(1, 500).toString(),
       if (bearer == null) 'api_key': key,
     };
-    final uri = Uri.https(_kTmdbHost, path, query);
+    final headers = _headers(bearerToken: bearer);
 
-    final resp = await _client.get(uri, headers: _headers(bearerToken: bearer));
+    final endpoints = preferProxy
+        ? const [kTmdbProxyHost, kTmdbOfficialHost]
+        : const [kTmdbOfficialHost, kTmdbProxyHost];
+
+    http.Response? lastResp;
+    Object? lastError;
+
+    for (final host in endpoints) {
+      final h = host.trim();
+      if (h.isEmpty) continue;
+      final uri = Uri.https(h, path, query);
+
+      try {
+        final resp =
+            await _client.get(uri, headers: headers).timeout(_timeout);
+        if (resp.statusCode >= 200 && resp.statusCode < 300) {
+          lastResp = resp;
+          break;
+        }
+        lastResp = resp;
+      } catch (e) {
+        lastError = e;
+        if (!_isRetryableNetworkError(e)) {
+          // If this isn't a network-ish error, still try the other endpoint as a
+          // best-effort (e.g. proxy misconfig). Don't early-exit here.
+        }
+      }
+    }
+
+    final resp = lastResp;
+    if (resp == null) {
+      throw TmdbApiException(
+        'TMDB API request failed',
+        body: lastError?.toString(),
+      );
+    }
     _ensureOk(resp);
 
     final decoded = jsonDecode(resp.body);
@@ -259,4 +334,3 @@ class TmdbApiClient {
         .toList(growable: false);
   }
 }
-
