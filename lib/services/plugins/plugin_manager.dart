@@ -45,8 +45,9 @@ class PluginFileEntryV1 {
     final path = (json['path'] as String? ?? '').trim();
     final size = json['size'];
     final sha256 = (json['sha256'] as String? ?? '').trim().toLowerCase();
-    if (path.isEmpty)
+    if (path.isEmpty) {
       throw PluginInstallException('manifest.files[].path 不能为空');
+    }
     if (size is! int || size < 0) {
       throw PluginInstallException('manifest.files[].size 格式错误');
     }
@@ -112,8 +113,9 @@ class PluginEntryTargetV1 {
       throw PluginInstallException('manifest.entry.<target> 格式错误（不是对象）');
     }
     final script = (json['script'] as String? ?? '').trim();
-    if (script.isEmpty)
+    if (script.isEmpty) {
       throw PluginInstallException('manifest.entry.<target>.script 不能为空');
+    }
     _validateRelativePath(script);
     return PluginEntryTargetV1(script: script);
   }
@@ -129,13 +131,15 @@ class PluginEntryV1 {
     PluginEntryTargetV1? tv;
     PluginEntryTargetV1? mobile;
     PluginEntryTargetV1? pc;
-    if (targets.contains(PluginTarget.tv))
+    if (targets.contains(PluginTarget.tv)) {
       tv = PluginEntryTargetV1.fromJson(json['tv']);
+    }
     if (targets.contains(PluginTarget.mobile)) {
       mobile = PluginEntryTargetV1.fromJson(json['mobile']);
     }
-    if (targets.contains(PluginTarget.pc))
+    if (targets.contains(PluginTarget.pc)) {
       pc = PluginEntryTargetV1.fromJson(json['pc']);
+    }
     return PluginEntryV1(tv: tv, mobile: mobile, pc: pc);
   }
 
@@ -178,22 +182,27 @@ class PluginPageContributionV1 {
     final route = (json['route'] as String? ?? '').trim();
     final render = (json['render'] as String? ?? '').trim();
     final onEvent = (json['onEvent'] as String? ?? '').trim();
-    if (id.isEmpty)
+    if (id.isEmpty) {
       throw PluginInstallException('manifest.contributions.pages[].id 不能为空');
-    if (title.isEmpty)
+    }
+    if (title.isEmpty) {
       throw PluginInstallException('manifest.contributions.pages[].title 不能为空');
-    if (route.isEmpty)
+    }
+    if (route.isEmpty) {
       throw PluginInstallException('manifest.contributions.pages[].route 不能为空');
+    }
     if (!route.startsWith('/')) {
       throw PluginInstallException(
           'manifest.contributions.pages[].route 必须以 / 开头');
     }
-    if (render.isEmpty)
+    if (render.isEmpty) {
       throw PluginInstallException(
           'manifest.contributions.pages[].render 不能为空');
-    if (onEvent.isEmpty)
+    }
+    if (onEvent.isEmpty) {
       throw PluginInstallException(
           'manifest.contributions.pages[].onEvent 不能为空');
+    }
 
     final targetsRaw = json['targets'];
     final targets = <PluginTarget>{};
@@ -311,8 +320,9 @@ class PluginManifestV1 {
           'manifest.id 格式错误（建议反向域名，如 com.example.plugin）');
     }
     if (name.isEmpty) throw PluginInstallException('manifest.name 不能为空');
-    if (description.isEmpty)
+    if (description.isEmpty) {
       throw PluginInstallException('manifest.description 不能为空');
+    }
     if (!_SemVer.tryParse(version).isValid) {
       throw PluginInstallException('manifest.version 不是合法 SemVer：$version');
     }
@@ -792,6 +802,38 @@ List<_BlockRule> _parseBlockRules(Object? decoded) {
   if (decoded is List) {
     list = decoded;
   } else if (decoded is Map) {
+    // schemaVersion=1 format:
+    // {
+    //   "blockedPlugins": [ "com.example.a", ... ],
+    //   "blockedVersions": [ { "pluginId": "...", "versions": ["1.0.0"] }, ... ]
+    // }
+    final blockedPluginsRaw = decoded['blockedPlugins'];
+    final blockedVersionsRaw = decoded['blockedVersions'];
+    if (blockedPluginsRaw is List ||
+        blockedPluginsRaw is Map ||
+        blockedVersionsRaw is List ||
+        blockedVersionsRaw is Map) {
+      final rules = <_BlockRule>[];
+
+      void addFrom(Object? raw) {
+        if (raw is List) {
+          for (final item in raw) {
+            final rule = _BlockRule.tryFromJson(item);
+            if (rule != null) rules.add(rule);
+          }
+          return;
+        }
+        if (raw is Map) {
+          rules.addAll(_parseBlockRulesFromIdMap(raw));
+          return;
+        }
+      }
+
+      addFrom(blockedPluginsRaw);
+      addFrom(blockedVersionsRaw);
+      return rules;
+    }
+
     final candidates = [
       decoded['blocked'],
       decoded['rules'],
